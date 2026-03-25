@@ -24,8 +24,21 @@ from qiskit_aer import AerSimulator
 # Inverse QFT
 # ---------------------------------------------------------------------------
 
+def _bit_reverse(j, n_bits):
+    """Reverse the bit order of integer *j* with *n_bits* bits."""
+    result = 0
+    for _ in range(n_bits):
+        result = (result << 1) | (j & 1)
+        j >>= 1
+    return result
+
+
 def inverse_qft_circuit(n_qubits):
     """Build an inverse Quantum Fourier Transform circuit on *n_qubits*.
+
+    Uses the standard QPE-compatible convention **without** bit-reversal
+    swaps, so that the eigenvalue register value *j* directly encodes the
+    phase via  θ = bit_reverse(j) / 2^n_qubits.
 
     Returns:
         QuantumCircuit on *n_qubits* qubits implementing QFT†.
@@ -35,9 +48,7 @@ def inverse_qft_circuit(n_qubits):
         for k in reversed(range(j + 1, n_qubits)):
             qc.cp(-np.pi / 2 ** (k - j), j, k)
         qc.h(j)
-    # Swap qubits to match standard QFT ordering
-    for i in range(n_qubits // 2):
-        qc.swap(i, n_qubits - 1 - i)
+    # No bit-reversal swaps — see _bit_reverse() for phase interpretation.
     return qc
 
 
@@ -139,9 +150,10 @@ def inverse_qpe_circuit(unitary_matrix, n_eigenvalue_qubits, n_state_qubits):
 def conditional_rotation_mean(n_eigenvalue_qubits, noise_var, frobenius_norm_sq):
     """Conditional R_y rotation for the mean estimator.
 
-    For eigenvalue register value |j⟩ representing phase θ = j/2^τ, the
-    rotation encodes  sin(angle/2) = c / (θ · F² + σ²)  where c is chosen
-    so that the maximum value is ≤ 1.
+    After QPE (without bit-reversal swaps), register value |j⟩ encodes
+    the eigenphase  θ = bit_reverse(j) / 2^τ.  The rotation encodes
+    sin(angle/2) = c / (θ · F² + σ²)  where c is chosen so the maximum
+    value is ≤ 1.
 
     The ancilla qubit amplitude after rotation is proportional to
     1 / (σ_r² + σ²), which is the spectral factor needed for the GP mean.
@@ -158,12 +170,11 @@ def conditional_rotation_mean(n_eigenvalue_qubits, noise_var, frobenius_norm_sq)
     n_vals = 2 ** tau
     qc = QuantumCircuit(tau + 1, name="CondRot_mean")
 
-    # Compute the target amplitude for each register value
-    # θ_j = j / 2^τ, so σ_r² ≈ θ_j * F²
-    # target amplitude ∝ 1 / (θ_j * F² + σ²)
+    # Compute the target amplitude for each register value.
+    # QPE encodes eigenphase as θ = bit_reverse(j) / 2^τ.
     targets = np.zeros(n_vals)
     for j in range(n_vals):
-        theta_j = j / n_vals
+        theta_j = _bit_reverse(j, tau) / n_vals
         sigma_r_sq = theta_j * frobenius_norm_sq
         targets[j] = 1.0 / (sigma_r_sq + noise_var)
 
@@ -219,7 +230,7 @@ def conditional_rotation_variance(n_eigenvalue_qubits, noise_var,
 
     targets = np.zeros(n_vals)
     for j in range(n_vals):
-        theta_j = j / n_vals
+        theta_j = _bit_reverse(j, tau) / n_vals
         sigma_r_sq = theta_j * frobenius_norm_sq
         if sigma_r_sq < 1e-15:
             targets[j] = 0.0
