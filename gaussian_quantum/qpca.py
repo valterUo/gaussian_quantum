@@ -273,7 +273,7 @@ def _pad_to(vec, dim):
 
 
 def prepare_qpca_state(input_vec, unitary_matrix, n_eigenvalue_qubits,
-                        n_state_qubits, cond_rot_circuit):
+                       n_state_qubits, cond_rot_circuit):
     """Build the full qPCA preparation circuit for a single input vector.
 
     Circuit layout (qubit ordering):

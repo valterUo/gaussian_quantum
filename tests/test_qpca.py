@@ -119,8 +119,8 @@ class TestQPECircuit:
         from qiskit.circuit.library import StatePreparation
 
         qc = QuantumCircuit(tau + n_sq)
-        qc.compose(StatePreparation(v), qubits=range(tau, tau + n_sq),
-                    inplace=True)
+        qc.compose(StatePreparation(v),
+                   qubits=range(tau, tau + n_sq), inplace=True)
         qc.compose(qpe_circuit(U, tau, n_sq), inplace=True)
         qc.save_statevector()
         tqc = transpile(qc, sv_backend)
@@ -163,7 +163,7 @@ class TestConditionalRotation:
 
 # ── full qPCA state preparation ─────────────────────────────────────────────
 
-class TestQPCAStatePreperation:
+class TestQPCAStatePreparation:
     def test_psi1_unit_norm(self, hsgp_setup, sv_backend):
         """Post-selected mean state |ψ₁⟩ is unit-normalised."""
         X_feat, y_train, x_star, noise_var = hsgp_setup
