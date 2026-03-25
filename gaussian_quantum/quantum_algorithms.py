@@ -1,26 +1,30 @@
 """Quantum algorithms for GP posterior mean and variance estimation.
 
-Implements the two core quantum primitives from arXiv:2402.00544
+Implements the full three-stage algorithm from arXiv:2402.00544
 (Quantum-Assisted Hilbert-Space Gaussian Process Regression):
 
-  • Hadamard test  →  Re⟨v̂₁|v̂₂⟩  (used for posterior mean μ*)
-  • Swap test      →  |⟨v̂₁|v̂₂⟩|² (used for posterior variance σ²*)
+  Stage 1 — Hilbert-space kernel approximation (see hilbert_space_approx.py):
+      k(x, x') ≈ Σ_j S(√λ_j) φ_j(x)φ_j(x'),  yielding  X = Φ√Λ.
 
-Both tests operate on amplitude-encoded quantum states: a classical
-real vector v ∈ ℝⁿ is encoded as the unit state |v̂⟩ = |v⟩/‖v‖.
+  Stage 2 — Quantum PCA + conditional rotations (see qpca.py):
+      QPE on ρ = X^T X / ‖X‖_F² extracts eigenvalues; conditional
+      rotations encode (σ_r² + σ²)^{-1} (mean) or σ_r/√(σ_r²+σ²) (variance).
 
-The GP quantities are then recovered by re-scaling with the classical norms:
+  Stage 3 — Hadamard / Swap tests (this module):
+      • Hadamard test  →  Re⟨ψ₁|ψ₂⟩  (posterior mean)
+      • Swap test      →  |⟨ψ'₁|ψ'₂⟩|² (posterior variance)
 
-    μ*  = ‖k*‖ · ‖α‖ · Re⟨k̂*|α̂⟩                (Hadamard test)
-    σ²* = k** − ‖k*‖ · ‖β‖ · |⟨k̂*|β̂⟩|           (Swap test + √)
-
-where α = (K+σ²I)⁻¹y and β = (K+σ²I)⁻¹k*.
+The low-level Hadamard and Swap tests also support direct inner-product
+estimation on arbitrary amplitude-encoded vectors (legacy API).
 """
 
 import numpy as np
 from qiskit import QuantumCircuit, transpile
 from qiskit.circuit.library import StatePreparation
 from qiskit_aer import AerSimulator
+
+from gaussian_quantum.hilbert_space_approx import hilbert_space_features
+from gaussian_quantum.qpca import prepare_mean_states, prepare_variance_states
 
 
 # ---------------------------------------------------------------------------
@@ -215,3 +219,135 @@ def quantum_gp_variance(
     inner_sq = swap_test(k_star, beta, shots=shots, backend=backend)
     quadratic_form = norm_k * norm_b * np.sqrt(inner_sq)
     return float(k_star_star) - quadratic_form
+
+
+# ---------------------------------------------------------------------------
+# Full quantum HSGP pipeline (Stages 1 + 2 + 3)
+# ---------------------------------------------------------------------------
+
+def quantum_hsgp_mean(
+    X_train, y_train, x_test, M, L, noise_var,
+    length_scale=1.0, amplitude=1.0,
+    n_eigenvalue_qubits=3, shots=8192, backend=None,
+):
+    """Full quantum-assisted HSGP posterior mean (arXiv:2402.00544).
+
+    Executes all three stages of the algorithm:
+
+        Stage 1  Hilbert-space kernel approximation → feature matrix X, X*.
+        Stage 2  qPCA + conditional rotations → states |ψ₁⟩, |ψ₂⟩.
+        Stage 3  Hadamard test → Re⟨ψ₁|ψ₂⟩ → μ*.
+
+    Args:
+        X_train: (N, d) training inputs.
+        y_train: (N,) training targets.
+        x_test:  (d,) or (1, d) single test input.
+        M: Number of HSGP basis functions per dimension.
+        L: Domain boundary for HSGP.
+        noise_var: Observation noise σ².
+        length_scale: RBF kernel length scale.
+        amplitude: RBF kernel signal amplitude.
+        n_eigenvalue_qubits: QPE precision bits τ.
+        shots: Measurement shots for the Hadamard test.
+        backend: Qiskit backend.
+
+    Returns:
+        Scalar estimate of the GP posterior mean μ*.
+    """
+    X_train = np.atleast_2d(X_train)
+    x_test = np.atleast_2d(x_test)
+
+    # ── Stage 1: HSGP features ──────────────────────────────────────────
+    X_feat, _, _, _ = hilbert_space_features(
+        X_train, M, L, length_scale, amplitude
+    )
+    X_star_feat, _, _, _ = hilbert_space_features(
+        x_test, M, L, length_scale, amplitude
+    )
+    x_star_feat = X_star_feat.ravel()
+
+    # ── Stage 2: qPCA state preparation ─────────────────────────────────
+    sv_backend = AerSimulator(method="statevector")
+    psi1, psi2, norm1, norm2, c_mean, sprob = prepare_mean_states(
+        X_feat, y_train, x_star_feat, noise_var,
+        n_eigenvalue_qubits=n_eigenvalue_qubits,
+        backend=sv_backend,
+    )
+
+    if norm1 < 1e-12 or norm2 < 1e-12 or sprob < 1e-15:
+        return 0.0
+
+    # ── Stage 3: Hadamard test on qPCA-prepared states ──────────────────
+    inner = hadamard_test(psi1, psi2, shots=shots, backend=backend)
+
+    # Reconstruct mean: μ* = (1/c_mean) · norm1 · norm2 · Re⟨ψ₁|ψ₂⟩
+    return float((1.0 / c_mean) * norm1 * norm2 * inner)
+
+
+def quantum_hsgp_variance(
+    X_train, x_test, M, L, noise_var,
+    length_scale=1.0, amplitude=1.0,
+    n_eigenvalue_qubits=3, shots=8192, backend=None,
+):
+    """Full quantum-assisted HSGP posterior variance (arXiv:2402.00544).
+
+    Executes all three stages of the algorithm:
+
+        Stage 1  Hilbert-space kernel approximation → feature matrix X, X*.
+        Stage 2  qPCA + conditional rotations → states |ψ'₁⟩ ∝ A⁻¹X*,
+                 |ψ'₂⟩ = X*/‖X*‖.
+        Stage 3  Swap test → |⟨ψ'₁|ψ'₂⟩|² → σ²*.
+
+    The variance is recovered as
+
+        V[f*] = σ² · ‖X*‖² · √p / c · √|⟨ψ'₁|ψ'₂⟩|²
+
+    where  p  is the qPCA success probability and  c  is the conditional
+    rotation normalisation constant.
+
+    Args:
+        X_train: (N, d) training inputs.
+        x_test:  (d,) or (1, d) single test input.
+        M: Number of HSGP basis functions per dimension.
+        L: Domain boundary for HSGP.
+        noise_var: σ².
+        length_scale: RBF kernel length scale.
+        amplitude: RBF kernel signal amplitude.
+        n_eigenvalue_qubits: QPE precision bits τ.
+        shots: Measurement shots for the Swap test.
+        backend: Qiskit backend.
+
+    Returns:
+        Scalar estimate of the GP posterior variance σ²*.
+    """
+    X_train = np.atleast_2d(X_train)
+    x_test = np.atleast_2d(x_test)
+
+    # ── Stage 1: HSGP features ──────────────────────────────────────────
+    X_feat, _, _, _ = hilbert_space_features(
+        X_train, M, L, length_scale, amplitude
+    )
+    X_star_feat, _, _, _ = hilbert_space_features(
+        x_test, M, L, length_scale, amplitude
+    )
+    x_star_feat = X_star_feat.ravel()
+
+    # ── Stage 2: qPCA state preparation (mean rotation for A⁻¹X*) ──────
+    sv_backend = AerSimulator(method="statevector")
+    psi1, psi2, norm_xstar, c_mean, sprob = prepare_variance_states(
+        X_feat, x_star_feat, noise_var,
+        n_eigenvalue_qubits=n_eigenvalue_qubits,
+        backend=sv_backend,
+    )
+
+    if norm_xstar < 1e-12 or sprob < 1e-15:
+        return float(noise_var)
+
+    # ── Stage 3: Swap test on qPCA-prepared states ──────────────────────
+    inner_sq = swap_test(psi1, psi2, shots=shots, backend=backend)
+
+    # V[f*] = σ² · ‖X*‖² · √p / c · √|⟨ψ'₁|ψ'₂⟩|²
+    return float(
+        noise_var * norm_xstar ** 2 * np.sqrt(sprob) / c_mean
+        * np.sqrt(inner_sq)
+    )
