@@ -406,7 +406,8 @@ def quantum_hsgp_integral(
     weights = np.asarray(weights, dtype=float)
     if len(weights) != len(X_test_grid):
         raise ValueError(
-            f"weights length {len(weights)} != X_test_grid length {len(X_test_grid)}"
+            f"Length of weights ({len(weights)}) must match "
+            f"length of X_test_grid ({len(X_test_grid)})."
         )
 
     integral_mean = 0.0
