@@ -191,3 +191,40 @@ def hs_gp_posterior(X_train, y_train, X_test, M, L, noise_var=1e-6,
     A_inv_Xstar = np.linalg.solve(A, X_star_feat.T)  # (M_total, m)
     var = noise_var * np.sum(X_star_feat.T * A_inv_Xstar, axis=0)  # (m,)
     return mean, var
+
+
+def hsgp_integral(X_train, y_train, X_test_grid, weights, M, L,
+                  noise_var=1e-6, length_scale=1.0, amplitude=1.0):
+    """Numerically integrate the HSGP posterior mean and variance over a grid.
+
+    Computes the quadrature estimates
+
+        I_mean = Σ_i  w_i · E[f*(x_i)]
+        I_var  = Σ_i  w_i · V[f*(x_i)]
+
+    using the classical HSGP posterior at the supplied test points.  This
+    serves as the reference baseline for the quantum integral estimators.
+
+    Args:
+        X_train: (N, d) training inputs.
+        y_train: (N,) training targets.
+        X_test_grid: (m, d) quadrature test-point locations.
+        weights: (m,) quadrature weights (e.g. trapezoidal or uniform).
+        M: Number of HSGP basis functions per dimension.
+        L: Domain boundary (scalar or length-d array).
+        noise_var: Observation noise variance σ².
+        length_scale: RBF kernel length scale.
+        amplitude: RBF kernel signal amplitude.
+
+    Returns:
+        integral_mean: Scalar ≈ ∫ E[f*(x)] dx.
+        integral_var:  Scalar ≈ ∫ V[f*(x)] dx.
+    """
+    weights = np.asarray(weights, dtype=float)
+    mean, var = hs_gp_posterior(
+        X_train, y_train, X_test_grid, M, L,
+        noise_var=noise_var,
+        length_scale=length_scale,
+        amplitude=amplitude,
+    )
+    return float(weights @ mean), float(weights @ var)
