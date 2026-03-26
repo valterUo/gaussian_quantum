@@ -26,6 +26,16 @@ from qiskit_aer import AerSimulator
 from gaussian_quantum.hilbert_space_approx import hilbert_space_features
 from gaussian_quantum.qpca import prepare_mean_states, prepare_variance_states
 
+__all__ = [
+    "hadamard_test",
+    "swap_test",
+    "quantum_gp_mean",
+    "quantum_gp_variance",
+    "quantum_hsgp_mean",
+    "quantum_hsgp_variance",
+    "quantum_hsgp_integral",
+]
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -351,3 +361,71 @@ def quantum_hsgp_variance(
         noise_var * norm_xstar ** 2 * np.sqrt(sprob) / c_mean
         * np.sqrt(inner_sq)
     )
+
+
+# ---------------------------------------------------------------------------
+# Quantum numerical integral of the GP posterior
+# ---------------------------------------------------------------------------
+
+def quantum_hsgp_integral(
+    X_train, y_train, X_test_grid, weights, M, L, noise_var,
+    length_scale=1.0, amplitude=1.0,
+    n_eigenvalue_qubits=3, shots=8192, backend=None,
+):
+    """Numerically integrate the quantum HSGP posterior mean and variance.
+
+    Computes the quadrature estimates
+
+        I_mean = Σ_i  w_i · quantum_hsgp_mean(…, x_i, …)
+        I_var  = Σ_i  w_i · quantum_hsgp_variance(…, x_i, …)
+
+    by evaluating the full three-stage quantum pipeline at each test point
+    *x_i* in *X_test_grid* and combining the results with the supplied
+    quadrature *weights*.  Trapezoidal weights for a uniform grid of spacing
+    *h* are  [h/2, h, h, …, h, h/2].
+
+    Args:
+        X_train: (N, d) training inputs.
+        y_train: (N,) training targets.
+        X_test_grid: (m, d) quadrature test-point locations.
+        weights: (m,) quadrature weights (e.g. trapezoidal or uniform).
+        M: Number of HSGP basis functions per dimension.
+        L: Domain boundary for HSGP.
+        noise_var: Observation noise σ².
+        length_scale: RBF kernel length scale.
+        amplitude: RBF kernel signal amplitude.
+        n_eigenvalue_qubits: QPE precision bits τ.
+        shots: Measurement shots per test point.
+        backend: Qiskit backend (default: AerSimulator).
+
+    Returns:
+        integral_mean: Scalar ≈ ∫ E[f*(x)] dx.
+        integral_var:  Scalar ≈ ∫ V[f*(x)] dx.
+    """
+    X_test_grid = np.atleast_2d(X_test_grid)
+    weights = np.asarray(weights, dtype=float)
+    if len(weights) != len(X_test_grid):
+        raise ValueError(
+            f"weights length {len(weights)} != X_test_grid length {len(X_test_grid)}"
+        )
+
+    integral_mean = 0.0
+    integral_var = 0.0
+    for x_i, w_i in zip(X_test_grid, weights):
+        x_i = x_i.reshape(1, -1)
+        mu_i = quantum_hsgp_mean(
+            X_train, y_train, x_i, M, L, noise_var,
+            length_scale=length_scale, amplitude=amplitude,
+            n_eigenvalue_qubits=n_eigenvalue_qubits,
+            shots=shots, backend=backend,
+        )
+        var_i = quantum_hsgp_variance(
+            X_train, x_i, M, L, noise_var,
+            length_scale=length_scale, amplitude=amplitude,
+            n_eigenvalue_qubits=n_eigenvalue_qubits,
+            shots=shots, backend=backend,
+        )
+        integral_mean += w_i * mu_i
+        integral_var += w_i * var_i
+
+    return float(integral_mean), float(integral_var)
