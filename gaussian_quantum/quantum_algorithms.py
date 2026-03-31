@@ -27,7 +27,12 @@ from gaussian_quantum.hilbert_space_approx import (
     hilbert_space_features,
     kernel_mean_features,
 )
-from gaussian_quantum.qpca import prepare_mean_states, prepare_variance_states
+from gaussian_quantum.qpca import (
+    prepare_mean_states,
+    prepare_variance_states,
+    prepare_mean_states_analytical,
+    prepare_variance_states_analytical,
+)
 
 __all__ = [
     "hadamard_test",
@@ -241,7 +246,8 @@ def quantum_gp_variance(
 def quantum_hsgp_mean(
     X_train, y_train, x_test, M, L, noise_var,
     length_scale=1.0, amplitude=1.0,
-    n_eigenvalue_qubits=3, shots=8192, backend=None,
+    n_eigenvalue_qubits=6, shots=8192, backend=None,
+    analytical=True,
 ):
     """Full quantum-assisted HSGP posterior mean (arXiv:2402.00544).
 
@@ -260,9 +266,10 @@ def quantum_hsgp_mean(
         noise_var: Observation noise σ².
         length_scale: RBF kernel length scale.
         amplitude: RBF kernel signal amplitude.
-        n_eigenvalue_qubits: QPE precision bits τ.
-        shots: Measurement shots for the Hadamard test.
+        n_eigenvalue_qubits: QPE precision bits τ (circuit mode only).
+        shots: Measurement shots for the Hadamard test (circuit mode only).
         backend: Qiskit backend.
+        analytical: If True (default), use exact eigendecomposition.
 
     Returns:
         Scalar estimate of the GP posterior mean μ*.
@@ -280,18 +287,26 @@ def quantum_hsgp_mean(
     x_star_feat = X_star_feat.ravel()
 
     # ── Stage 2: qPCA state preparation ─────────────────────────────────
-    sv_backend = AerSimulator(method="statevector")
-    psi1, psi2, norm1, norm2, c_mean, sprob = prepare_mean_states(
-        X_feat, y_train, x_star_feat, noise_var,
-        n_eigenvalue_qubits=n_eigenvalue_qubits,
-        backend=sv_backend,
-    )
+    if analytical:
+        psi1, psi2, norm1, norm2, c_mean, sprob = prepare_mean_states_analytical(
+            X_feat, y_train, x_star_feat, noise_var,
+        )
+    else:
+        sv_backend = AerSimulator(method="statevector")
+        psi1, psi2, norm1, norm2, c_mean, sprob = prepare_mean_states(
+            X_feat, y_train, x_star_feat, noise_var,
+            n_eigenvalue_qubits=n_eigenvalue_qubits,
+            backend=sv_backend,
+        )
 
     if norm1 < 1e-12 or norm2 < 1e-12 or sprob < 1e-15:
         return 0.0
 
     # ── Stage 3: Hadamard test on qPCA-prepared states ──────────────────
-    inner = hadamard_test(psi1, psi2, shots=shots, backend=backend)
+    if analytical:
+        inner = float(np.real(np.vdot(psi1, psi2)))
+    else:
+        inner = hadamard_test(psi1, psi2, shots=shots, backend=backend)
 
     # Reconstruct mean: μ* = (1/c_mean) · norm1 · norm2 · Re⟨ψ₁|ψ₂⟩
     return float((1.0 / c_mean) * norm1 * norm2 * inner)
@@ -300,7 +315,8 @@ def quantum_hsgp_mean(
 def quantum_hsgp_variance(
     X_train, x_test, M, L, noise_var,
     length_scale=1.0, amplitude=1.0,
-    n_eigenvalue_qubits=3, shots=8192, backend=None,
+    n_eigenvalue_qubits=6, shots=8192, backend=None,
+    analytical=True,
 ):
     """Full quantum-assisted HSGP posterior variance (arXiv:2402.00544).
 
@@ -326,9 +342,10 @@ def quantum_hsgp_variance(
         noise_var: σ².
         length_scale: RBF kernel length scale.
         amplitude: RBF kernel signal amplitude.
-        n_eigenvalue_qubits: QPE precision bits τ.
-        shots: Measurement shots for the Swap test.
+        n_eigenvalue_qubits: QPE precision bits τ (circuit mode only).
+        shots: Measurement shots for the Swap test (circuit mode only).
         backend: Qiskit backend.
+        analytical: If True (default), use exact eigendecomposition.
 
     Returns:
         Scalar estimate of the GP posterior variance σ²*.
@@ -346,18 +363,26 @@ def quantum_hsgp_variance(
     x_star_feat = X_star_feat.ravel()
 
     # ── Stage 2: qPCA state preparation (mean rotation for A⁻¹X*) ──────
-    sv_backend = AerSimulator(method="statevector")
-    psi1, psi2, norm_xstar, c_mean, sprob = prepare_variance_states(
-        X_feat, x_star_feat, noise_var,
-        n_eigenvalue_qubits=n_eigenvalue_qubits,
-        backend=sv_backend,
-    )
+    if analytical:
+        psi1, psi2, norm_xstar, c_mean, sprob = prepare_variance_states_analytical(
+            X_feat, x_star_feat, noise_var,
+        )
+    else:
+        sv_backend = AerSimulator(method="statevector")
+        psi1, psi2, norm_xstar, c_mean, sprob = prepare_variance_states(
+            X_feat, x_star_feat, noise_var,
+            n_eigenvalue_qubits=n_eigenvalue_qubits,
+            backend=sv_backend,
+        )
 
     if norm_xstar < 1e-12 or sprob < 1e-15:
         return float(noise_var)
 
     # ── Stage 3: Swap test on qPCA-prepared states ──────────────────────
-    inner_sq = swap_test(psi1, psi2, shots=shots, backend=backend)
+    if analytical:
+        inner_sq = float(np.real(np.vdot(psi1, psi2))) ** 2
+    else:
+        inner_sq = swap_test(psi1, psi2, shots=shots, backend=backend)
 
     # V[f*] = σ² · ‖X*‖² · √p / c · √|⟨ψ'₁|ψ'₂⟩|²
     return float(
@@ -373,7 +398,8 @@ def quantum_hsgp_variance(
 def quantum_hsgp_integral(
     X_train, y_train, domain, M, L, noise_var,
     length_scale=1.0, amplitude=1.0,
-    n_eigenvalue_qubits=3, shots=8192, backend=None,
+    n_eigenvalue_qubits=6, shots=8192, backend=None,
+    analytical=False,
 ):
     """Bayesian quadrature integral via the quantum HSGP algorithm.
 
@@ -399,9 +425,12 @@ def quantum_hsgp_integral(
         noise_var: Observation noise σ².
         length_scale: RBF kernel length scale.
         amplitude: RBF kernel signal amplitude.
-        n_eigenvalue_qubits: QPE precision bits τ.
-        shots: Measurement shots.
+        n_eigenvalue_qubits: QPE precision bits τ (circuit mode only).
+        shots: Measurement shots (circuit mode only).
         backend: Qiskit backend (default: AerSimulator).
+        analytical: If True (default), use exact eigendecomposition instead
+            of QPE circuits.  This gives the ideal quantum result without
+            finite-precision QPE error.
 
     Returns:
         integral_mean: Scalar, BQ posterior mean of the integral.
@@ -418,30 +447,47 @@ def quantum_hsgp_integral(
     )
 
     # ── Stage 2 + 3 (mean): qPCA with z_μ as "test feature" ────────────
-    sv_backend = AerSimulator(method="statevector")
-    psi1, psi2, norm1, norm2, c_mean, sprob = prepare_mean_states(
-        X_feat, y_train, z_mu, noise_var,
-        n_eigenvalue_qubits=n_eigenvalue_qubits,
-        backend=sv_backend,
-    )
+    if analytical:
+        psi1, psi2, norm1, norm2, c_mean, sprob = prepare_mean_states_analytical(
+            X_feat, y_train, z_mu, noise_var,
+        )
+    else:
+        sv_backend = AerSimulator(method="statevector")
+        psi1, psi2, norm1, norm2, c_mean, sprob = prepare_mean_states(
+            X_feat, y_train, z_mu, noise_var,
+            n_eigenvalue_qubits=n_eigenvalue_qubits,
+            backend=sv_backend,
+        )
 
     if norm1 < 1e-12 or norm2 < 1e-12 or sprob < 1e-15:
         integral_mean = 0.0
     else:
-        inner = hadamard_test(psi1, psi2, shots=shots, backend=backend)
+        if analytical:
+            inner = float(np.real(np.vdot(psi1, psi2)))
+        else:
+            inner = hadamard_test(psi1, psi2, shots=shots, backend=backend)
         integral_mean = float((1.0 / c_mean) * norm1 * norm2 * inner)
 
     # ── Stage 2 + 3 (variance): qPCA + Swap test with z_μ ──────────────
-    psi1_v, psi2_v, norm_z, c_mean_v, sprob_v = prepare_variance_states(
-        X_feat, z_mu, noise_var,
-        n_eigenvalue_qubits=n_eigenvalue_qubits,
-        backend=sv_backend,
-    )
+    if analytical:
+        psi1_v, psi2_v, norm_z, c_mean_v, sprob_v = prepare_variance_states_analytical(
+            X_feat, z_mu, noise_var,
+        )
+    else:
+        sv_backend = AerSimulator(method="statevector")
+        psi1_v, psi2_v, norm_z, c_mean_v, sprob_v = prepare_variance_states(
+            X_feat, z_mu, noise_var,
+            n_eigenvalue_qubits=n_eigenvalue_qubits,
+            backend=sv_backend,
+        )
 
     if norm_z < 1e-12 or sprob_v < 1e-15:
         integral_var = 0.0
     else:
-        inner_sq = swap_test(psi1_v, psi2_v, shots=shots, backend=backend)
+        if analytical:
+            inner_sq = float(np.real(np.vdot(psi1_v, psi2_v))) ** 2
+        else:
+            inner_sq = swap_test(psi1_v, psi2_v, shots=shots, backend=backend)
         integral_var = float(
             noise_var * norm_z ** 2 * np.sqrt(sprob_v) / c_mean_v
             * np.sqrt(inner_sq)

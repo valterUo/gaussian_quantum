@@ -409,7 +409,7 @@ def run_qpca_statevector(circuit, backend=None):
         backend = AerSimulator(method="statevector")
     qc = circuit.copy()
     qc.save_statevector()
-    tqc = transpile(qc, backend)
+    tqc = transpile(qc, backend, optimization_level=0)
     result = backend.run(tqc, shots=1).result()
     return np.asarray(result.get_statevector(qc))
 
@@ -543,3 +543,75 @@ def prepare_variance_states(X_feat, x_star_feat, noise_var,
         psi2[: len(x_star_feat)] = x_star_feat / norm_xstar_vec
 
     return psi1, psi2, norm_xstar_vec, c_mean, success_prob
+
+
+# ---------------------------------------------------------------------------
+# Analytical (noiseless) QPE simulation  –  exact eigendecomposition
+# ---------------------------------------------------------------------------
+
+def prepare_mean_states_analytical(X_feat, y_train, x_star_feat, noise_var):
+    """Analytical equivalent of :func:`prepare_mean_states`.
+
+    Replaces the QPE circuit with an exact eigendecomposition of XᵀX,
+    giving the *ideal* quantum result (infinite QPE precision).  This is
+    the classical simulation approach used by the reference implementation.
+
+    Returns the same tuple as :func:`prepare_mean_states`.
+    """
+    XtX = X_feat.T @ X_feat
+    F_sq = float(np.trace(XtX))
+    M = XtX.shape[0]
+
+    eigenvalues, eigenvectors = np.linalg.eigh(XtX)
+    eigenvalues = np.maximum(eigenvalues, 0.0)
+
+    # Conditional rotation targets  1/(λ_r + σ²)
+    targets = np.zeros(M)
+    for i in range(M):
+        if eigenvalues[i] > 1e-12:
+            targets[i] = 1.0 / (eigenvalues[i] + noise_var)
+    c_mean = 1.0 / np.max(targets) if np.max(targets) > 0 else 1.0
+
+    # Components in eigenbasis
+    norm_xstar = float(np.linalg.norm(x_star_feat))
+    alpha = eigenvectors.T @ x_star_feat / norm_xstar  # normalised
+
+    # Unnormalised post-selected state: α_j · c/(λ_j + σ²)
+    psi1_unnorm = alpha * targets * c_mean
+    success_prob = float(np.sum(np.abs(psi1_unnorm) ** 2))
+    psi1 = psi1_unnorm / np.sqrt(success_prob) if success_prob > 1e-15 else psi1_unnorm
+
+    # |ψ₂⟩ = Xᵀy in eigenbasis
+    Xty = X_feat.T @ y_train
+    norm_Xty = float(np.linalg.norm(Xty))
+    beta = eigenvectors.T @ Xty / norm_Xty if norm_Xty > 1e-12 else np.zeros(M)
+
+    norm_psi1 = norm_xstar * np.sqrt(success_prob)
+    return psi1, beta, norm_psi1, norm_Xty, c_mean, success_prob
+
+
+def prepare_variance_states_analytical(X_feat, x_star_feat, noise_var):
+    """Analytical equivalent of :func:`prepare_variance_states`."""
+    XtX = X_feat.T @ X_feat
+    M = XtX.shape[0]
+
+    eigenvalues, eigenvectors = np.linalg.eigh(XtX)
+    eigenvalues = np.maximum(eigenvalues, 0.0)
+
+    targets = np.zeros(M)
+    for i in range(M):
+        if eigenvalues[i] > 1e-12:
+            targets[i] = 1.0 / (eigenvalues[i] + noise_var)
+    c_mean = 1.0 / np.max(targets) if np.max(targets) > 0 else 1.0
+
+    norm_xstar = float(np.linalg.norm(x_star_feat))
+    alpha = eigenvectors.T @ x_star_feat / norm_xstar
+
+    psi1_unnorm = alpha * targets * c_mean
+    success_prob = float(np.sum(np.abs(psi1_unnorm) ** 2))
+    psi1 = psi1_unnorm / np.sqrt(success_prob) if success_prob > 1e-15 else psi1_unnorm
+
+    # |ψ'₂⟩ = X* in eigenbasis
+    psi2 = eigenvectors.T @ x_star_feat / norm_xstar
+
+    return psi1, psi2, norm_xstar, c_mean, success_prob
