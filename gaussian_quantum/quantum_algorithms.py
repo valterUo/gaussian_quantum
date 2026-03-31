@@ -23,7 +23,10 @@ from qiskit import QuantumCircuit, transpile
 from qiskit.circuit.library import StatePreparation
 from qiskit_aer import AerSimulator
 
-from gaussian_quantum.hilbert_space_approx import hilbert_space_features
+from gaussian_quantum.hilbert_space_approx import (
+    hilbert_space_features,
+    kernel_mean_features,
+)
 from gaussian_quantum.qpca import prepare_mean_states, prepare_variance_states
 
 __all__ = [
@@ -368,65 +371,80 @@ def quantum_hsgp_variance(
 # ---------------------------------------------------------------------------
 
 def quantum_hsgp_integral(
-    X_train, y_train, X_test_grid, weights, M, L, noise_var,
+    X_train, y_train, domain, M, L, noise_var,
     length_scale=1.0, amplitude=1.0,
     n_eigenvalue_qubits=3, shots=8192, backend=None,
 ):
-    """Numerically integrate the quantum HSGP posterior mean and variance.
+    """Bayesian quadrature integral via the quantum HSGP algorithm.
 
-    Computes the quadrature estimates
+    Computes the Bayesian quadrature estimates (with uniform measure μ=1):
 
-        I_mean = Σ_i  w_i · quantum_hsgp_mean(…, x_i, …)
-        I_var  = Σ_i  w_i · quantum_hsgp_variance(…, x_i, …)
+        Q_BQ = z_μᵀ (XᵀX + σ²I)⁻¹ Xᵀy
+        V_BQ = σ² z_μᵀ (XᵀX + σ²I)⁻¹ z_μ
 
-    by evaluating the full three-stage quantum pipeline at each test point
-    *x_i* in *X_test_grid* and combining the results with the supplied
-    quadrature *weights*.  Trapezoidal weights for a uniform grid of spacing
-    *h* are  [h/2, h, h, …, h, h/2].
+    where z_μ = √Λ · Φ_μ is the kernel mean embedding feature vector.
+
+    The computation re-uses the full three-stage quantum pipeline.  Instead
+    of evaluating the GP posterior at individual test points, the kernel mean
+    embedding z_μ is passed as the "test feature" so that the Hadamard /
+    Swap tests directly estimate the BQ mean and variance in a single call
+    each.
 
     Args:
         X_train: (N, d) training inputs.
         y_train: (N,) training targets.
-        X_test_grid: (m, d) quadrature test-point locations.
-        weights: (m,) quadrature weights (e.g. trapezoidal or uniform).
+        domain: Integration domain (a, b) for 1-D, or list of (a_k, b_k).
         M: Number of HSGP basis functions per dimension.
         L: Domain boundary for HSGP.
         noise_var: Observation noise σ².
         length_scale: RBF kernel length scale.
         amplitude: RBF kernel signal amplitude.
         n_eigenvalue_qubits: QPE precision bits τ.
-        shots: Measurement shots per test point.
+        shots: Measurement shots.
         backend: Qiskit backend (default: AerSimulator).
 
     Returns:
-        integral_mean: Scalar ≈ ∫ E[f*(x)] dx.
-        integral_var:  Scalar ≈ ∫ V[f*(x)] dx.
+        integral_mean: Scalar, BQ posterior mean of the integral.
+        integral_var:  Scalar, BQ posterior variance of the integral.
     """
-    X_test_grid = np.atleast_2d(X_test_grid)
-    weights = np.asarray(weights, dtype=float)
-    if len(weights) != len(X_test_grid):
-        raise ValueError(
-            f"Length of weights ({len(weights)}) must match "
-            f"length of X_test_grid ({len(X_test_grid)})."
+    X_train = np.atleast_2d(X_train)
+
+    # ── Stage 1: HSGP features + kernel mean embedding ──────────────────
+    X_feat, _, _, _ = hilbert_space_features(
+        X_train, M, L, length_scale, amplitude
+    )
+    z_mu, _, _, _ = kernel_mean_features(
+        domain, M, L, length_scale, amplitude
+    )
+
+    # ── Stage 2 + 3 (mean): qPCA with z_μ as "test feature" ────────────
+    sv_backend = AerSimulator(method="statevector")
+    psi1, psi2, norm1, norm2, c_mean, sprob = prepare_mean_states(
+        X_feat, y_train, z_mu, noise_var,
+        n_eigenvalue_qubits=n_eigenvalue_qubits,
+        backend=sv_backend,
+    )
+
+    if norm1 < 1e-12 or norm2 < 1e-12 or sprob < 1e-15:
+        integral_mean = 0.0
+    else:
+        inner = hadamard_test(psi1, psi2, shots=shots, backend=backend)
+        integral_mean = float((1.0 / c_mean) * norm1 * norm2 * inner)
+
+    # ── Stage 2 + 3 (variance): qPCA + Swap test with z_μ ──────────────
+    psi1_v, psi2_v, norm_z, c_mean_v, sprob_v = prepare_variance_states(
+        X_feat, z_mu, noise_var,
+        n_eigenvalue_qubits=n_eigenvalue_qubits,
+        backend=sv_backend,
+    )
+
+    if norm_z < 1e-12 or sprob_v < 1e-15:
+        integral_var = 0.0
+    else:
+        inner_sq = swap_test(psi1_v, psi2_v, shots=shots, backend=backend)
+        integral_var = float(
+            noise_var * norm_z ** 2 * np.sqrt(sprob_v) / c_mean_v
+            * np.sqrt(inner_sq)
         )
 
-    integral_mean = 0.0
-    integral_var = 0.0
-    for x_i, w_i in zip(X_test_grid, weights):
-        x_i = x_i.reshape(1, -1)
-        mu_i = quantum_hsgp_mean(
-            X_train, y_train, x_i, M, L, noise_var,
-            length_scale=length_scale, amplitude=amplitude,
-            n_eigenvalue_qubits=n_eigenvalue_qubits,
-            shots=shots, backend=backend,
-        )
-        var_i = quantum_hsgp_variance(
-            X_train, x_i, M, L, noise_var,
-            length_scale=length_scale, amplitude=amplitude,
-            n_eigenvalue_qubits=n_eigenvalue_qubits,
-            shots=shots, backend=backend,
-        )
-        integral_mean += w_i * mu_i
-        integral_var += w_i * var_i
-
-    return float(integral_mean), float(integral_var)
+    return integral_mean, integral_var

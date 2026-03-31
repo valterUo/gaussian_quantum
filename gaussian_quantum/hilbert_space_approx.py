@@ -193,23 +193,102 @@ def hs_gp_posterior(X_train, y_train, X_test, M, L, noise_var=1e-6,
     return mean, var
 
 
-def hsgp_integral(X_train, y_train, X_test_grid, weights, M, L,
+def basis_function_integrals(indices, L, domain):
+    """Integrate each Laplace eigenfunction over a box domain.
+
+    Computes  (Φ_μ)_j = ∫_Ω φ_j(x) dx  analytically.  For a single
+    dimension with eigenfunction
+
+        φ_j(x) = (1/√L) sin(jπ(x+L) / (2L)),
+
+    the integral over [a, b] is
+
+        (2√L / (jπ)) [cos(jπ(a+L)/(2L)) − cos(jπ(b+L)/(2L))].
+
+    For d dimensions the result is the product of 1-D integrals.
+
+    Args:
+        indices: (M_total, d) multi-indices (1-based).
+        L: Domain boundary (scalar or length-d array for the HSGP domain).
+        domain: Integration domain.  Either (a, b) for 1-D, or a sequence
+            of (a_k, b_k) pairs for d-D.
+
+    Returns:
+        phi_mu: (M_total,) vector of basis-function integrals.
+    """
+    L = np.atleast_1d(np.asarray(L, dtype=float))
+    d = indices.shape[1]
+    if L.size == 1:
+        L = np.repeat(L, d)
+
+    # Normalise domain to a list of (a_k, b_k) per dimension
+    domain = np.asarray(domain)
+    if domain.ndim == 1 and d == 1:
+        domain = domain.reshape(1, 2)
+    elif domain.ndim == 1 and len(domain) == 2 * d:
+        domain = domain.reshape(d, 2)
+
+    phi_mu = np.ones(len(indices))
+    for k in range(d):
+        a_k, b_k = float(domain[k, 0]), float(domain[k, 1])
+        j_k = indices[:, k]  # 1-based index
+        arg_a = j_k * np.pi * (a_k + L[k]) / (2.0 * L[k])
+        arg_b = j_k * np.pi * (b_k + L[k]) / (2.0 * L[k])
+        phi_mu *= (2.0 * np.sqrt(L[k]) / (j_k * np.pi)) * (
+            np.cos(arg_a) - np.cos(arg_b)
+        )
+    return phi_mu
+
+
+def kernel_mean_features(domain, M, L, length_scale=1.0, amplitude=1.0):
+    """Compute the kernel mean embedding feature vector z_μ = √Λ · Φ_μ.
+
+    This is the HSGP analogue of the kernel mean  k_μ(x) = ∫ k(x,x') dμ(x').
+    In feature space the BQ integral reduces to a dot product with z_μ in
+    place of a test-point feature vector.
+
+    Args:
+        domain: Integration domain, (a, b) for 1-D or list of (a_k, b_k).
+        M: Number of basis functions per dimension.
+        L: HSGP domain boundary.
+        length_scale: RBF kernel length scale.
+        amplitude: RBF kernel signal amplitude.
+
+    Returns:
+        z_mu: (M_total,) kernel mean embedding feature vector.
+        diag_sqrt_S: (M_total,) square-root spectral weights.
+        indices: (M_total, d) multi-indices.
+        eigenvalues: (M_total,) Laplace eigenvalues.
+    """
+    L_arr = np.atleast_1d(np.asarray(L, dtype=float))
+    d = L_arr.size
+
+    indices, eigenvalues = laplace_eigenvalues(M, L, d)
+    S_vals = spectral_density_rbf(eigenvalues, length_scale, amplitude, d)
+    diag_sqrt_S = np.sqrt(np.maximum(S_vals, 0.0))
+
+    phi_mu = basis_function_integrals(indices, L, domain)
+    z_mu = diag_sqrt_S * phi_mu
+    return z_mu, diag_sqrt_S, indices, eigenvalues
+
+
+def hsgp_integral(X_train, y_train, domain, M, L,
                   noise_var=1e-6, length_scale=1.0, amplitude=1.0):
-    """Numerically integrate the HSGP posterior mean and variance over a grid.
+    """Bayesian quadrature integral using the HSGP kernel approximation.
 
-    Computes the quadrature estimates
+    Computes the Bayesian quadrature estimates (with uniform measure μ=1):
 
-        I_mean = Σ_i  w_i · E[f*(x_i)]
-        I_var  = Σ_i  w_i · V[f*(x_i)]
+        Q_BQ = z_μᵀ (XᵀX + σ²I)⁻¹ Xᵀy
+        V_BQ = σ² z_μᵀ (XᵀX + σ²I)⁻¹ z_μ
 
-    using the classical HSGP posterior at the supplied test points.  This
-    serves as the reference baseline for the quantum integral estimators.
+    where z_μ = √Λ · Φ_μ is the kernel mean embedding feature vector, Φ_μ
+    contains the integrals of each HSGP basis function over *domain*, and
+    X = Φ√Λ is the HSGP feature matrix at training points.
 
     Args:
         X_train: (N, d) training inputs.
         y_train: (N,) training targets.
-        X_test_grid: (m, d) quadrature test-point locations.
-        weights: (m,) quadrature weights (e.g. trapezoidal or uniform).
+        domain: Integration domain (a, b) for 1-D, or list of (a_k, b_k).
         M: Number of HSGP basis functions per dimension.
         L: Domain boundary (scalar or length-d array).
         noise_var: Observation noise variance σ².
@@ -217,14 +296,32 @@ def hsgp_integral(X_train, y_train, X_test_grid, weights, M, L,
         amplitude: RBF kernel signal amplitude.
 
     Returns:
-        integral_mean: Scalar ≈ ∫ E[f*(x)] dx.
-        integral_var:  Scalar ≈ ∫ V[f*(x)] dx.
+        integral_mean: Scalar, BQ posterior mean of the integral.
+        integral_var:  Scalar, BQ posterior variance of the integral.
     """
-    weights = np.asarray(weights, dtype=float)
-    mean, var = hs_gp_posterior(
-        X_train, y_train, X_test_grid, M, L,
-        noise_var=noise_var,
-        length_scale=length_scale,
-        amplitude=amplitude,
+    X_train = np.atleast_2d(X_train)
+
+    # HSGP features at training points
+    X_feat, _, _, _ = hilbert_space_features(
+        X_train, M, L, length_scale, amplitude
     )
-    return float(weights @ mean), float(weights @ var)
+
+    # Kernel mean embedding features
+    z_mu, _, _, _ = kernel_mean_features(
+        domain, M, L, length_scale, amplitude
+    )
+
+    M_total = X_feat.shape[1]
+    XtX = X_feat.T @ X_feat                       # (M_total, M_total)
+    A = XtX + noise_var * np.eye(M_total)          # (M_total, M_total)
+
+    # BQ mean:  z_μᵀ A⁻¹ Xᵀy
+    Xty = X_feat.T @ y_train                       # (M_total,)
+    A_inv_Xty = np.linalg.solve(A, Xty)            # (M_total,)
+    integral_mean = float(z_mu @ A_inv_Xty)
+
+    # BQ variance:  σ² z_μᵀ A⁻¹ z_μ
+    A_inv_z = np.linalg.solve(A, z_mu)              # (M_total,)
+    integral_var = float(noise_var * z_mu @ A_inv_z)
+
+    return integral_mean, integral_var
