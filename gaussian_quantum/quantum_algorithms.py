@@ -69,7 +69,7 @@ def _pad_normalize(v: np.ndarray, n_qubits: int) -> np.ndarray:
 # Hadamard test
 # ---------------------------------------------------------------------------
 
-def hadamard_test(v1, v2, shots: int = 8192, backend=None) -> float:
+def hadamard_test(v1, v2, shots: int = 8192, backend=None, seed=None) -> float:
     """Estimate Re⟨v̂₁|v̂₂⟩ using the Hadamard test.
 
     Circuit overview (ancilla qubit 0, system qubits 1…n_q):
@@ -90,7 +90,7 @@ def hadamard_test(v1, v2, shots: int = 8192, backend=None) -> float:
         Estimate of Re⟨v̂₁|v̂₂⟩ ∈ [−1, 1].
     """
     if backend is None:
-        backend = AerSimulator()
+        backend = AerSimulator(seed_simulator=seed)
 
     v1 = np.asarray(v1, dtype=complex)
     v2 = np.asarray(v2, dtype=complex)
@@ -127,7 +127,7 @@ def hadamard_test(v1, v2, shots: int = 8192, backend=None) -> float:
 # Swap test
 # ---------------------------------------------------------------------------
 
-def swap_test(v1, v2, shots: int = 8192, backend=None) -> float:
+def swap_test(v1, v2, shots: int = 8192, backend=None, seed=None) -> float:
     """Estimate |⟨v̂₁|v̂₂⟩|² using the Swap test.
 
     Circuit overview (ancilla qubit 0, first register 1…n_q,
@@ -148,7 +148,7 @@ def swap_test(v1, v2, shots: int = 8192, backend=None) -> float:
         Estimate of |⟨v̂₁|v̂₂⟩|² ∈ [0, 1].
     """
     if backend is None:
-        backend = AerSimulator()
+        backend = AerSimulator(seed_simulator=seed)
 
     v1 = np.asarray(v1, dtype=complex)
     v2 = np.asarray(v2, dtype=complex)
@@ -399,7 +399,7 @@ def quantum_hsgp_integral(
     X_train, y_train, domain, M, L, noise_var,
     length_scale=1.0, amplitude=1.0,
     n_eigenvalue_qubits=6, shots=8192, backend=None,
-    analytical=False,
+    analytical=False, seed=None,
 ):
     """Bayesian quadrature integral via the quantum HSGP algorithm.
 
@@ -428,7 +428,7 @@ def quantum_hsgp_integral(
         n_eigenvalue_qubits: QPE precision bits τ (circuit mode only).
         shots: Measurement shots (circuit mode only).
         backend: Qiskit backend (default: AerSimulator).
-        analytical: If True (default), use exact eigendecomposition instead
+        analytical: If True, use exact eigendecomposition instead
             of QPE circuits.  This gives the ideal quantum result without
             finite-precision QPE error.
 
@@ -452,7 +452,7 @@ def quantum_hsgp_integral(
             X_feat, y_train, z_mu, noise_var,
         )
     else:
-        sv_backend = AerSimulator(method="statevector")
+        sv_backend = AerSimulator(method="statevector", seed_simulator=seed)
         psi1, psi2, norm1, norm2, c_mean, sprob = prepare_mean_states(
             X_feat, y_train, z_mu, noise_var,
             n_eigenvalue_qubits=n_eigenvalue_qubits,
@@ -465,7 +465,7 @@ def quantum_hsgp_integral(
         if analytical:
             inner = float(np.real(np.vdot(psi1, psi2)))
         else:
-            inner = hadamard_test(psi1, psi2, shots=shots, backend=backend)
+            inner = hadamard_test(psi1, psi2, shots=shots, backend=backend, seed=seed)
         integral_mean = float((1.0 / c_mean) * norm1 * norm2 * inner)
 
     # ── Stage 2 + 3 (variance): qPCA + Swap test with z_μ ──────────────
@@ -474,7 +474,7 @@ def quantum_hsgp_integral(
             X_feat, z_mu, noise_var,
         )
     else:
-        sv_backend = AerSimulator(method="statevector")
+        sv_backend = AerSimulator(method="statevector", seed_simulator=seed)
         psi1_v, psi2_v, norm_z, c_mean_v, sprob_v = prepare_variance_states(
             X_feat, z_mu, noise_var,
             n_eigenvalue_qubits=n_eigenvalue_qubits,
@@ -487,7 +487,7 @@ def quantum_hsgp_integral(
         if analytical:
             inner_sq = float(np.real(np.vdot(psi1_v, psi2_v))) ** 2
         else:
-            inner_sq = swap_test(psi1_v, psi2_v, shots=shots, backend=backend)
+            inner_sq = swap_test(psi1_v, psi2_v, shots=shots, backend=backend, seed=seed)
         integral_var = float(
             noise_var * norm_z ** 2 * np.sqrt(sprob_v) / c_mean_v
             * np.sqrt(inner_sq)

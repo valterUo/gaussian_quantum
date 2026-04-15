@@ -41,10 +41,10 @@ DISTRIBUTIONS = {
         "scipy": lambda p: stats.weibull_min(c=p["shape"], scale=p.get("scale", 1.0)),
         "default_params": {"shape": 1.5, "scale": 2.0},
     },
-    "poisson": {
-        "scipy": lambda p: stats.poisson(mu=p["lam"]),
-        "default_params": {"lam": 5.0},
-    },
+    #"poisson": {
+    #    "scipy": lambda p: stats.poisson(mu=p["lam"]),
+    #    "default_params": {"lam": 5.0},
+    #},
 }
 
 
