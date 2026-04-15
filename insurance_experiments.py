@@ -52,9 +52,9 @@ def run_experiment(
     shots=8192,
     seed=679,
     point_strategy="hybrid",
-    quantum_N=32,
-    quantum_M=20,
-    quantum_noise_std=0.05,
+    quantum_N=16,
+    quantum_M=6,
+    quantum_noise_std=0.01,
     quantum_length_scale=1.0,
 ):
     """Run a single BQ experiment for one (distribution, payoff) pair.
@@ -159,17 +159,31 @@ def run_experiment(
     result["hsgp_mean"] = hsgp_mean
     result["hsgp_var"] = hsgp_var
 
-    # ── 4. Quantum HSGP-BQ (optional) ────────────────────────────────────
+    # ── 4. Quantum HSGP-BQ  ────────────────────────────────────
     #
-    # The quantum method uses QPE circuits whose accuracy degrades when
-    # the Frobenius norm F² = trace(XᵀX) is too large or the noise
-    # variance too small.  High F² widens QPE phase bins (coarser
-    # eigenvalue resolution) and small σ² makes the conditional rotation
-    # 1/(σ_r² + σ²) extremely steep near zero — amplifying any QPE
-    # discretisation error.  We therefore give the quantum method its own
-    # QPE-compatible configuration: fewer evaluation points (smaller F²),
-    # moderate noise (gentler rotation) and a longer kernel length scale.
-    if run_quantum or run_quantum_analytical:
+    # The quantum circuit method uses QPE circuits whose accuracy degrades
+    # when the Frobenius norm F² = trace(XᵀX) is too large or the noise
+    # variance too small.  We therefore give the circuit method its own
+    # QPE-compatible configuration.
+    #
+    # The *analytical* quantum method uses exact eigendecomposition, so it
+    # is algebraically identical to classical HSGP.  To demonstrate this,
+    # it shares the same data, domain, and hyperparameters as the HSGP
+    # method above.
+    if run_quantum_analytical:
+        from gaussian_quantum.quantum_algorithms import quantum_hsgp_integral
+
+        t0 = time.perf_counter()
+        qa_mean, qa_var = quantum_hsgp_integral(
+            X_eval, y_eval, centered_domain, M, L, noise_var,
+            length_scale=length_scale, amplitude=amplitude,
+            analytical=True,
+        )
+        timings["quantum_analytical"] = time.perf_counter() - t0
+        result["quantum_analytical_mean"] = qa_mean
+        result["quantum_analytical_var"] = qa_var
+
+    if run_quantum:
         from gaussian_quantum.quantum_algorithms import quantum_hsgp_integral
 
         # Quantum-specific evaluation points (uniform on [a, b],
@@ -187,27 +201,15 @@ def run_experiment(
         # cover max(|a|, |b|) with a margin.
         q_L = max(max(abs(a), abs(b)) * 1.2, 1.0)
 
-        if run_quantum_analytical:
-            t0 = time.perf_counter()
-            qa_mean, qa_var = quantum_hsgp_integral(
-                q_X_eval, q_y_eval, q_bq_domain, quantum_M, q_L, q_noise_var,
-                length_scale=quantum_length_scale, amplitude=amplitude,
-                analytical=True,
-            )
-            timings["quantum_analytical"] = time.perf_counter() - t0
-            result["quantum_analytical_mean"] = qa_mean
-            result["quantum_analytical_var"] = qa_var
-
-        if run_quantum:
-            t0 = time.perf_counter()
-            q_mean, q_var = quantum_hsgp_integral(
-                q_X_eval, q_y_eval, q_bq_domain, quantum_M, q_L, q_noise_var,
-                length_scale=quantum_length_scale, amplitude=amplitude,
-                n_eigenvalue_qubits=n_eigenvalue_qubits, shots=shots, seed=seed,
-            )
-            timings["quantum"] = time.perf_counter() - t0
-            result["quantum_mean"] = q_mean
-            result["quantum_var"] = q_var
+        t0 = time.perf_counter()
+        q_mean, q_var = quantum_hsgp_integral(
+            q_X_eval, q_y_eval, q_bq_domain, quantum_M, q_L, q_noise_var,
+            length_scale=quantum_length_scale, amplitude=amplitude,
+            n_eigenvalue_qubits=n_eigenvalue_qubits, shots=shots, seed=seed,
+        )
+        timings["quantum"] = time.perf_counter() - t0
+        result["quantum_mean"] = q_mean
+        result["quantum_var"] = q_var
 
     result["timings"] = timings
     return result
@@ -508,11 +510,11 @@ def main():
     parser.add_argument("--point-strategy", type=str, default="hybrid",
                         choices=["hybrid", "quantile", "uniform"],
                         help="Evaluation point placement (default: hybrid)")
-    parser.add_argument("--quantum-N", type=int, default=32,
-                        help="Quantum evaluation points (default: 32)")
-    parser.add_argument("--quantum-M", type=int, default=20,
-                        help="Quantum HSGP basis functions (default: 20)")
-    parser.add_argument("--n-eigenvalue-qubits", type=int, default=12,
+    parser.add_argument("--quantum-N", type=int, default=16,
+                        help="Quantum evaluation points (default: 16)")
+    parser.add_argument("--quantum-M", type=int, default=6,
+                        help="Quantum HSGP basis functions (default: 6)")
+    parser.add_argument("--n-eigenvalue-qubits", type=int, default=9,
                         help="QPE eigenvalue register qubits (default: 9)")
     parser.add_argument("--quantum-noise-std", type=float, default=0.01,
                         help="Quantum observation noise std (default: 0.01)")

@@ -178,9 +178,20 @@ def conditional_rotation_mean(n_eigenvalue_qubits, noise_var, frobenius_norm_sq)
         sigma_r_sq = theta_j * frobenius_norm_sq
         targets[j] = 1.0 / (sigma_r_sq + noise_var)
 
-    # Normalise so max amplitude ≤ 1
-    c = 1.0 / np.max(targets) if np.max(targets) > 0 else 1.0
+    # Normalise so max amplitude ≤ 1.
+    # Skip the j=0 bin (θ=0 → σ_r²=0) when computing the normalisation
+    # constant, because no real eigenvalue of XᵀX sits at exactly zero
+    # (the matrix is positive semi-definite with non-trivial features).
+    # Including j=0 would make c = σ² ≈ 0, suppressing all rotations.
+    nonzero_targets = [targets[j] for j in range(n_vals)
+                       if _bit_reverse(j, tau) > 0]
+    if nonzero_targets:
+        c = 1.0 / max(nonzero_targets)
+    else:
+        c = 1.0 / np.max(targets) if np.max(targets) > 0 else 1.0
     targets *= c
+    # Clip the j=0 target (which may now exceed 1) so the rotation is valid
+    targets[0] = min(targets[0], 1.0)
 
     # Apply controlled rotation for each basis state |j⟩
     for j in range(n_vals):
@@ -559,7 +570,6 @@ def prepare_mean_states_analytical(X_feat, y_train, x_star_feat, noise_var):
     Returns the same tuple as :func:`prepare_mean_states`.
     """
     XtX = X_feat.T @ X_feat
-    F_sq = float(np.trace(XtX))
     M = XtX.shape[0]
 
     eigenvalues, eigenvectors = np.linalg.eigh(XtX)

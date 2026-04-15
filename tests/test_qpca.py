@@ -154,11 +154,21 @@ class TestConditionalRotation:
         _, c = conditional_rotation_mean(3, 0.01, 3.0)
         assert c > 0
 
-    def test_mean_rotation_c_equals_noise_var(self):
-        """For j=0 (zero eigenvalue), max target is 1/σ², so c = σ²."""
+    def test_mean_rotation_c_excludes_zero_bin(self):
+        """Normalisation constant c excludes the j=0 bin (θ=0) and is
+        determined by the smallest non-zero QPE phase instead."""
         noise_var = 0.05
-        _, c = conditional_rotation_mean(3, noise_var, 3.0)
-        np.testing.assert_allclose(c, noise_var, rtol=1e-10)
+        F_sq = 3.0
+        tau = 3
+        _, c = conditional_rotation_mean(tau, noise_var, F_sq)
+        # c should be larger than σ² because the j=0 bin is excluded
+        assert c > noise_var
+        # c = 1 / max(nonzero targets)
+        # smallest non-zero phase = 1/2^tau (bit_reverse(1,tau)/2^tau can
+        # vary, but the minimum non-zero theta is 1/2^tau)
+        min_nonzero_sigma_sq = (1.0 / 2**tau) * F_sq
+        expected_c = min_nonzero_sigma_sq + noise_var
+        np.testing.assert_allclose(c, expected_c, rtol=1e-10)
 
 
 # ── full qPCA state preparation ─────────────────────────────────────────────
