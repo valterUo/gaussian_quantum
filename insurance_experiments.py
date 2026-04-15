@@ -282,7 +282,7 @@ def run_all_experiments(
 # Printing / Reporting
 # ---------------------------------------------------------------------------
 
-def print_summary_table(results, run_quantum=False):
+def print_summary_table(results, run_quantum=False, run_quantum_analytical=False):
     """Print a tabular summary of results."""
     header = (
         f"{'Distribution':>12s}  {'Payoff':>25s}  "
@@ -293,6 +293,8 @@ def print_summary_table(results, run_quantum=False):
     header += f"  {'GPQ_err':>10s}  {'HSGP_err':>10s}"
     if run_quantum:
         header += f"  {'Q_err':>10s}"
+    if run_quantum_analytical:
+        header += f"  {'QA_err':>10s}"
 
     print("\n" + "=" * len(header))
     print(header)
@@ -314,6 +316,10 @@ def print_summary_table(results, run_quantum=False):
         if run_quantum and "quantum_mean" in r:
             line += f"  {abs(r['exact'] - r['quantum_mean']):10.6f}"
         elif run_quantum:
+            line += f"  {'N/A':>10s}"
+        if run_quantum_analytical and "quantum_analytical_mean" in r:
+            line += f"  {abs(r['exact'] - r['quantum_analytical_mean']):10.6f}"
+        elif run_quantum_analytical:
             line += f"  {'N/A':>10s}"
         print(line)
 
