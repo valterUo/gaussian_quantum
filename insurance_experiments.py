@@ -48,13 +48,13 @@ def run_experiment(
     amplitude=1.0,
     run_quantum=False,
     run_quantum_analytical=False,
-    n_eigenvalue_qubits=9,
-    shots=8192,
+    n_eigenvalue_qubits=8,
+    shots=65536,
     seed=679,
     point_strategy="hybrid",
-    quantum_N=16,
+    quantum_N=32,
     quantum_M=6,
-    quantum_noise_std=0.01,
+    quantum_noise_std=0.001,
     quantum_length_scale=1.0,
 ):
     """Run a single BQ experiment for one (distribution, payoff) pair.
@@ -186,26 +186,49 @@ def run_experiment(
     if run_quantum:
         from gaussian_quantum.quantum_algorithms import quantum_hsgp_integral
 
-        # Quantum-specific evaluation points (uniform on [a, b],
-        # using the raw domain — diagnostic shows raw gives more
-        # consistent QPE circuit accuracy across distributions)
-        q_X_raw = np.linspace(a, b, quantum_N)
+        # Quantum-specific evaluation points.  Use the same hybrid strategy
+        # as the classical methods: 70 % quantile-placed points (dense where
+        # the PDF peaks, critical for heavy-tailed distributions such as
+        # Pareto) merged with 30 % uniform points to cover the tail.
+        q_n_q = int(0.7 * quantum_N)
+        q_n_u = quantum_N - q_n_q
+        q_probs = np.linspace(1.0 / (q_n_q + 1), q_n_q / (q_n_q + 1), q_n_q)
+        q_X_quantile = np.clip(dist.ppf(q_probs), a, b)
+        q_X_uniform = np.linspace(a, b, q_n_u)
+        q_X_raw = np.sort(np.unique(np.concatenate([q_X_quantile, q_X_uniform])))
+        if len(q_X_raw) > quantum_N:
+            idx = np.round(np.linspace(0, len(q_X_raw) - 1, quantum_N)).astype(int)
+            q_X_raw = q_X_raw[idx]
+        elif len(q_X_raw) < quantum_N:
+            q_X_fill = np.linspace(a, b, quantum_N - len(q_X_raw) + 2)[1:-1]
+            q_X_raw = np.sort(
+                np.unique(np.concatenate([q_X_raw, q_X_fill]))
+            )[:quantum_N]
+
         q_y_eval = np.squeeze(integrand(q_X_raw))
         q_y_eval = q_y_eval + np.random.default_rng(seed).normal(
             0.0, quantum_noise_std, size=q_y_eval.shape,
         )
-        q_X_eval = q_X_raw.reshape(-1, 1)
         q_noise_var = quantum_noise_std ** 2
-        q_bq_domain = (a, b)
-        # For raw domain, eigenfunctions live on [-L, L] so L must
-        # cover max(|a|, |b|) with a margin.
-        q_L = max(max(abs(a), abs(b)) * 1.2, 1.0)
+
+        # Centre the quantum domain identically to the classical pipeline.
+        # Using the raw uncentered domain causes eigenfunctions to cover
+        # [-q_L, q_L] with data only in [0, b] — roughly half the support
+        # is empty, halving F² = ‖X‖_F² and collapsing c_mean, which
+        # amplifies shot noise by up to 1/c_mean ≈ 300× at the old defaults.
+        q_midpoint = (a + b) / 2.0
+        q_half_width = (b - a) / 2.0
+        q_L = max(q_half_width * 1.3, 1.0)
+        q_X_eval = (q_X_raw - q_midpoint).reshape(-1, 1)
+        q_centered_domain = (a - q_midpoint, b - q_midpoint)
 
         t0 = time.perf_counter()
         q_mean, q_var = quantum_hsgp_integral(
-            q_X_eval, q_y_eval, q_bq_domain, quantum_M, q_L, q_noise_var,
+            q_X_eval, q_y_eval, q_centered_domain, quantum_M, q_L, q_noise_var,
             length_scale=quantum_length_scale, amplitude=amplitude,
             n_eigenvalue_qubits=n_eigenvalue_qubits, shots=shots, seed=seed,
+            noise_var_variance=noise_var,
+            M_variance=M,
         )
         timings["quantum"] = time.perf_counter() - t0
         result["quantum_mean"] = q_mean
@@ -424,6 +447,7 @@ def plot_integrand(integrand, domain, X_eval, y_eval, title=""):
     ax.fill_between(z, g, alpha=0.15, color="steelblue")
     ax.plot(z, g, "steelblue", lw=2, label=r"$\Pi(z)\,f_Z(z)$")
     ax.plot(X_eval.ravel(), y_eval, "rx", ms=7, label="Noisy observations")
+    #ax.set_yscale("log")
     ax.set_xlabel("$z$", fontsize=16)
     ax.set_ylabel("Integrand", fontsize=16)
     #ax.set_title(title or "Integrand and training data")
@@ -433,8 +457,22 @@ def plot_integrand(integrand, domain, X_eval, y_eval, title=""):
     return fig
 
 
-def plot_comparison_gaussians(result, run_quantum=False, run_quantum_analytical=False):
-    """Overlay Gaussian PDFs N(mean, var) for each BQ method."""
+def plot_comparison_gaussians(
+    result,
+    run_quantum=False,
+    run_quantum_analytical=False,
+    normalize=True,
+    use_log=False,
+    clip_min=1e-300,
+):
+    """Overlay Gaussian PDFs N(mean, var) for each BQ method.
+
+    Args:
+        normalize: if True, scale each PDF by its peak (so peaks=1) to
+            compare shapes regardless of absolute height.
+        use_log: if True, use a log y-axis (clip values below `clip_min`).
+        clip_min: minimum y-value to use when plotting on a log scale.
+    """
     import matplotlib.pyplot as plt
     from scipy.stats import norm
 
@@ -448,7 +486,7 @@ def plot_comparison_gaussians(result, run_quantum=False, run_quantum_analytical=
         ("GPQ", result["gpq_mean"], result["gpq_var"], color_GPQ, ":"),
         ("HSGP-BQ", result["hsgp_mean"], result["hsgp_var"], color_HSGP, "--"),
     ]
-    if run_quantum_analytical and "quantum_analytical_mean" in result:
+    if run_quantum_analytical and "quantum_analytical_mean" in result and False:
         methods.append(
             ("Q-Analytical", result["quantum_analytical_mean"],
              result["quantum_analytical_var"], color_QA, "-."),
@@ -471,11 +509,28 @@ def plot_comparison_gaussians(result, run_quantum=False, run_quantum_analytical=
         std = np.sqrt(max(var, 1e-12))
         pdf = norm.pdf(x, mu, std)
         peak = norm.pdf(mu, mu, std)
+        if normalize:
+            pdf = pdf / peak
+            peak_plot = 1.0
+            label_plot = f"{label} (norm)"
+        else:
+            peak_plot = peak
+            label_plot = label
+
+        # Avoid zeros / negative infinities on log scale
+        if use_log:
+            pdf = np.clip(pdf, clip_min, None)
+
         plt.fill_between(x, pdf, alpha=0.15, color=color)
-        plt.plot(x, pdf, color=color, ls=ls, lw=2, label=label)
-        plt.vlines(mu, 0, peak, color=color, linewidth=1.0, linestyle='-', alpha=0.6)
+        plt.plot(x, pdf, color=color, ls=ls, lw=2, label=label_plot)
+        vbottom = clip_min if use_log else 0
+        plt.vlines(mu, vbottom, peak_plot, color=color, linewidth=1.0, linestyle='-', alpha=0.6)
     plt.xlabel("Integral value", fontsize=16)
     plt.ylabel("Probability density", fontsize=16)
+    if use_log:
+        plt.yscale("log")
+    else:
+        plt.yscale("linear")
     #plt.title(f"{result['dist_name']} × {result['payoff_name']}")
     plt.tick_params(direction='in', labelsize=14)
     plt.legend(loc="upper right", fontsize=14)
@@ -499,10 +554,10 @@ def main():
                         help="Save comparison plots to figures/")
     parser.add_argument("--N", type=int, default=32,
                         help="Number of evaluation points (default: 32)")
-    parser.add_argument("--M", type=int, default=20,
-                        help="Number of HSGP basis functions (default: 20)")
-    parser.add_argument("--shots", type=int, default=32768,
-                        help="Quantum measurement shots (default: 32768 = 15 qubits)")
+    parser.add_argument("--M", type=int, default=32,
+                        help="Number of HSGP basis functions (default: 32)")
+    parser.add_argument("--shots", type=int, default=65536,
+                        help="Quantum measurement shots (default: 65536 = 16 qubits)")
     parser.add_argument("--seed", type=int, default=679,
                         help="Random seed (default: 679)")
     parser.add_argument("--noise-std", type=float, default=0.01,
@@ -510,14 +565,14 @@ def main():
     parser.add_argument("--point-strategy", type=str, default="hybrid",
                         choices=["hybrid", "quantile", "uniform"],
                         help="Evaluation point placement (default: hybrid)")
-    parser.add_argument("--quantum-N", type=int, default=16,
-                        help="Quantum evaluation points (default: 16)")
+    parser.add_argument("--quantum-N", type=int, default=32,
+                        help="Quantum evaluation points (default: 32)")
     parser.add_argument("--quantum-M", type=int, default=6,
                         help="Quantum HSGP basis functions (default: 6)")
-    parser.add_argument("--n-eigenvalue-qubits", type=int, default=9,
-                        help="QPE eigenvalue register qubits (default: 9)")
-    parser.add_argument("--quantum-noise-std", type=float, default=0.01,
-                        help="Quantum observation noise std (default: 0.01)")
+    parser.add_argument("--n-eigenvalue-qubits", type=int, default=8,
+                        help="QPE eigenvalue register qubits (default: 8)")
+    parser.add_argument("--quantum-noise-std", type=float, default=0.001,
+                        help="Quantum observation noise std (default: 0.001)")
     parser.add_argument("--quantum-length-scale", type=float, default=1.0,
                         help="Quantum kernel length scale (default: 1.0)")
     args = parser.parse_args()

@@ -475,6 +475,7 @@ def prepare_mean_states(X_feat, y_train, x_star_feat, noise_var,
     )
 
     # Run on statevector simulator
+    #print("Number of qubits in qPCA circuit:", qpca_circ.num_qubits)
     sv = run_qpca_statevector(qpca_circ, backend)
 
     # Post-select ancilla = 1 (successful rotation)
