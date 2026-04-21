@@ -227,8 +227,6 @@ def run_experiment(
             q_X_eval, q_y_eval, q_centered_domain, quantum_M, q_L, q_noise_var,
             length_scale=quantum_length_scale, amplitude=amplitude,
             n_eigenvalue_qubits=n_eigenvalue_qubits, shots=shots, seed=seed,
-            noise_var_variance=noise_var,
-            M_variance=M,
         )
         timings["quantum"] = time.perf_counter() - t0
         result["quantum_mean"] = q_mean
@@ -567,12 +565,12 @@ def main():
                         help="Evaluation point placement (default: hybrid)")
     parser.add_argument("--quantum-N", type=int, default=32,
                         help="Quantum evaluation points (default: 32)")
-    parser.add_argument("--quantum-M", type=int, default=6,
-                        help="Quantum HSGP basis functions (default: 6)")
+    parser.add_argument("--quantum-M", type=int, default=32,
+                        help="Quantum HSGP basis functions (default: 32)")
     parser.add_argument("--n-eigenvalue-qubits", type=int, default=8,
                         help="QPE eigenvalue register qubits (default: 8)")
-    parser.add_argument("--quantum-noise-std", type=float, default=0.001,
-                        help="Quantum observation noise std (default: 0.001)")
+    parser.add_argument("--quantum-noise-std", type=float, default=0.01,
+                        help="Quantum observation noise std (default: 0.01)")
     parser.add_argument("--quantum-length-scale", type=float, default=1.0,
                         help="Quantum kernel length scale (default: 1.0)")
     args = parser.parse_args()

@@ -400,7 +400,6 @@ def quantum_hsgp_integral(
     length_scale=1.0, amplitude=1.0,
     n_eigenvalue_qubits=6, shots=8192, backend=None,
     analytical=False, seed=None,
-    noise_var_variance=None, M_variance=None,
 ):
     """Bayesian quadrature integral via the quantum HSGP algorithm.
 
@@ -432,24 +431,12 @@ def quantum_hsgp_integral(
         analytical: If True, use exact eigendecomposition instead
             of QPE circuits.  This gives the ideal quantum result without
             finite-precision QPE error.
-        noise_var_variance: If given, use this σ² for the variance stage
-            instead of *noise_var*.  Useful when QPE stability requires a
-            smaller noise_var for the mean but the correct BQ variance
-            needs the true observation noise.  Defaults to *noise_var*.
-        M_variance: If given, use this many basis functions for the variance
-            stage instead of *M*.  Must match the M used for the classical
-            reference if you want the variances to be comparable.  Defaults
-            to *M*.
 
     Returns:
         integral_mean: Scalar, BQ posterior mean of the integral.
         integral_var:  Scalar, BQ posterior variance of the integral.
     """
     X_train = np.atleast_2d(X_train)
-
-    # Resolve variance-stage overrides
-    nv_var = noise_var_variance if noise_var_variance is not None else noise_var
-    M_var  = M_variance          if M_variance          is not None else M
 
     # ── Stage 1: HSGP features + kernel mean embedding ──────────────────
     X_feat, _, _, _ = hilbert_space_features(
@@ -458,17 +445,6 @@ def quantum_hsgp_integral(
     z_mu, _, _, _ = kernel_mean_features(
         domain, M, L, length_scale, amplitude
     )
-
-    # Variance stage may use different M → recompute features when needed
-    if M_var != M:
-        X_feat_v, _, _, _ = hilbert_space_features(
-            X_train, M_var, L, length_scale, amplitude
-        )
-        z_mu_v, _, _, _ = kernel_mean_features(
-            domain, M_var, L, length_scale, amplitude
-        )
-    else:
-        X_feat_v, z_mu_v = X_feat, z_mu
 
     # ── Stage 2 + 3 (mean): qPCA with z_μ as "test feature" ────────────
     if analytical:
@@ -495,12 +471,12 @@ def quantum_hsgp_integral(
     # ── Stage 2 + 3 (variance): qPCA + Swap test with z_μ ──────────────
     if analytical:
         psi1_v, psi2_v, norm_z, c_mean_v, sprob_v = prepare_variance_states_analytical(
-            X_feat_v, z_mu_v, nv_var,
+            X_feat, z_mu, noise_var,
         )
     else:
         sv_backend = AerSimulator(method="statevector", seed_simulator=seed)
         psi1_v, psi2_v, norm_z, c_mean_v, sprob_v = prepare_variance_states(
-            X_feat_v, z_mu_v, nv_var,
+            X_feat, z_mu, noise_var,
             n_eigenvalue_qubits=n_eigenvalue_qubits,
             backend=sv_backend,
         )
@@ -513,7 +489,7 @@ def quantum_hsgp_integral(
         else:
             inner_sq = swap_test(psi1_v, psi2_v, shots=shots, backend=backend, seed=seed)
         integral_var = float(
-            nv_var * norm_z ** 2 * np.sqrt(sprob_v) / c_mean_v
+            noise_var * norm_z ** 2 * np.sqrt(sprob_v) / c_mean_v
             * np.sqrt(inner_sq)
         )
 
