@@ -298,6 +298,8 @@ def run_all_experiments(
                 msg += f"  Q_err={err_q:.6f}"
             print(msg)
             results.append(res)
+            break
+        break
     return results
 
 
@@ -484,7 +486,7 @@ def plot_comparison_gaussians(
         ("GPQ", result["gpq_mean"], result["gpq_var"], color_GPQ, ":"),
         ("HSGP-BQ", result["hsgp_mean"], result["hsgp_var"], color_HSGP, "--"),
     ]
-    if run_quantum_analytical and "quantum_analytical_mean" in result and False:
+    if run_quantum_analytical and "quantum_analytical_mean" in result:
         methods.append(
             ("Q-Analytical", result["quantum_analytical_mean"],
              result["quantum_analytical_var"], color_QA, "-."),
@@ -567,8 +569,8 @@ def main():
                         help="Quantum evaluation points (default: 32)")
     parser.add_argument("--quantum-M", type=int, default=32,
                         help="Quantum HSGP basis functions (default: 32)")
-    parser.add_argument("--n-eigenvalue-qubits", type=int, default=8,
-                        help="QPE eigenvalue register qubits (default: 8)")
+    parser.add_argument("--n-eigenvalue-qubits", type=int, default=15,
+                        help="QPE eigenvalue register qubits (default: 15)")
     parser.add_argument("--quantum-noise-std", type=float, default=0.01,
                         help="Quantum observation noise std (default: 0.01)")
     parser.add_argument("--quantum-length-scale", type=float, default=1.0,

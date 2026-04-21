@@ -609,11 +609,12 @@ def prepare_variance_states_analytical(X_feat, x_star_feat, noise_var):
     eigenvalues, eigenvectors = np.linalg.eigh(XtX)
     eigenvalues = np.maximum(eigenvalues, 0.0)
 
-    targets = np.zeros(M)
-    for i in range(M):
-        if eigenvalues[i] > 1e-12:
-            targets[i] = 1.0 / (eigenvalues[i] + noise_var)
-    c_mean = 1.0 / np.max(targets) if np.max(targets) > 0 else 1.0
+    # All eigenvalues contribute via 1/(λ + σ²), which is always safe
+    # since σ² > 0.  Excluding near-zero eigenvalues would wrongly omit
+    # their (vᵣᵀzμ)²/σ² contribution to the variance (unlike the mean,
+    # where Xvᵣ=0 makes vᵣᵀXᵀy=0, so those terms vanish automatically).
+    targets = 1.0 / (eigenvalues + noise_var)
+    c_mean = 1.0 / np.max(targets)  # = min(λ + σ²) = σ² for zero eigenvalues
 
     norm_xstar = float(np.linalg.norm(x_star_feat))
     alpha = eigenvectors.T @ x_star_feat / norm_xstar
