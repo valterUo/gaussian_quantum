@@ -461,7 +461,7 @@ def plot_comparison_gaussians(
     result,
     run_quantum=False,
     run_quantum_analytical=False,
-    normalize=True,
+    normalize=False,
     use_log=False,
     clip_min=1e-300,
 ):
@@ -475,6 +475,20 @@ def plot_comparison_gaussians(
     """
     import matplotlib.pyplot as plt
     from scipy.stats import norm
+
+    # IEEE font settings - Times New Roman
+    plt.rcParams.update({
+        "font.family": "serif",
+        "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
+        "mathtext.fontset": "stix", # STIX matches Times closely for math
+        "font.size": 14, # IEEE uses 8-10pt for captions
+        "axes.labelsize": 14,
+        "axes.titlesize": 14,
+        "xtick.labelsize": 12,
+        "ytick.labelsize": 12,
+        "legend.fontsize": 12,
+        "figure.dpi": 600 # IEEE wants 600 dpi for line art
+    })
 
     exact = result["exact"]
     color_GPQ = "k"

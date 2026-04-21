@@ -147,7 +147,8 @@ def inverse_qpe_circuit(unitary_matrix, n_eigenvalue_qubits, n_state_qubits):
 # Conditional rotations
 # ---------------------------------------------------------------------------
 
-def conditional_rotation_mean(n_eigenvalue_qubits, noise_var, frobenius_norm_sq):
+def conditional_rotation_mean(n_eigenvalue_qubits, noise_var, frobenius_norm_sq,
+                             include_zero_bin=False):
     """Conditional R_y rotation for the mean estimator.
 
     After QPE (without bit-reversal swaps), register value |j⟩ encodes
@@ -162,6 +163,12 @@ def conditional_rotation_mean(n_eigenvalue_qubits, noise_var, frobenius_norm_sq)
         n_eigenvalue_qubits: τ — number of eigenvalue qubits.
         noise_var: Observation noise variance σ².
         frobenius_norm_sq: ‖X‖_F².
+        include_zero_bin: If True, include the j=0 bin (θ=0, σ_r²=0) when
+            computing the normalisation constant, giving c = σ².  This is
+            required for variance estimation so that zero-eigenvalue modes
+            contribute their full 1/σ² weight.  For mean estimation the
+            j=0 bin is skipped (default False) because zero-eigenvalue
+            modes do not contribute to the mean (XᵀXvᵣ=0 → vᵣᵀXᵀy=0).
 
     Returns:
         QuantumCircuit on (τ + 1) qubits (eigenvalue register + ancilla).
@@ -179,19 +186,27 @@ def conditional_rotation_mean(n_eigenvalue_qubits, noise_var, frobenius_norm_sq)
         targets[j] = 1.0 / (sigma_r_sq + noise_var)
 
     # Normalise so max amplitude ≤ 1.
-    # Skip the j=0 bin (θ=0 → σ_r²=0) when computing the normalisation
-    # constant, because no real eigenvalue of XᵀX sits at exactly zero
-    # (the matrix is positive semi-definite with non-trivial features).
-    # Including j=0 would make c = σ² ≈ 0, suppressing all rotations.
-    nonzero_targets = [targets[j] for j in range(n_vals)
-                       if _bit_reverse(j, tau) > 0]
-    if nonzero_targets:
-        c = 1.0 / max(nonzero_targets)
+    if include_zero_bin:
+        # For variance: include j=0 (θ=0 → 1/σ²) so c = σ².  This matches
+        # the analytical variance normalisation and correctly weights all
+        # eigenvalue modes, including near-zero ones.
+        c = 1.0 / np.max(targets)  # = σ² (minimum of λ_r + σ²)
     else:
-        c = 1.0 / np.max(targets) if np.max(targets) > 0 else 1.0
+        # For mean: skip the j=0 bin (θ=0 → σ_r²=0) when computing the
+        # normalisation constant, because no real eigenvalue of XᵀX sits
+        # at exactly zero (the matrix is positive semi-definite with
+        # non-trivial features).  Including j=0 would make c = σ² ≈ 0,
+        # suppressing all rotations.
+        nonzero_targets = [targets[j] for j in range(n_vals)
+                           if _bit_reverse(j, tau) > 0]
+        if nonzero_targets:
+            c = 1.0 / max(nonzero_targets)
+        else:
+            c = 1.0 / np.max(targets) if np.max(targets) > 0 else 1.0
     targets *= c
-    # Clip the j=0 target (which may now exceed 1) so the rotation is valid
-    targets[0] = min(targets[0], 1.0)
+    # Clip any target that still exceeds 1 (can happen in the mean path
+    # when the j=0 bin is not included in normalisation).
+    targets = np.minimum(targets, 1.0)
 
     # Apply controlled rotation for each basis state |j⟩
     for j in range(n_vals):
@@ -535,8 +550,11 @@ def prepare_variance_states(X_feat, x_star_feat, noise_var,
     )
     tau = n_eigenvalue_qubits
 
-    # Use the mean conditional rotation to encode (σ_r² + σ²)^{-1}
-    cond_rot, c_mean = conditional_rotation_mean(tau, noise_var, F_sq)
+    # Use the mean conditional rotation to encode (σ_r² + σ²)^{-1}.
+    # include_zero_bin=True so that j=0 (θ=0, σ_r²=0) contributes its full
+    # 1/σ² weight, giving c = σ² — identical to the analytical normalisation.
+    cond_rot, c_mean = conditional_rotation_mean(tau, noise_var, F_sq,
+                                                 include_zero_bin=True)
 
     qpca_circ, norm_xstar = prepare_qpca_state(
         x_star_feat, U, tau, n_state_qubits, cond_rot
