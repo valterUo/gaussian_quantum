@@ -95,7 +95,7 @@ def plot_comparison_gaussians(
     hi = max(m + 4 * s for m, s in zip(all_means, all_stds))
     x = np.linspace(lo, hi, 500)
 
-    fig, ax = plt.subplots(figsize=(10, 4))
+    fig, ax = plt.subplots(figsize=(10, 5))
     ax.axvline(x=exact, color="k", linestyle="-", linewidth=1.5, label="Exact")
 
     for label, mu, var, color, ls in methods:
