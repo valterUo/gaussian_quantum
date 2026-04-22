@@ -458,6 +458,8 @@ def quantum_hsgp_integral(
             n_eigenvalue_qubits=n_eigenvalue_qubits,
             backend=sv_backend,
         )
+    
+    #print("Number of qubits for mean estimation:", int(np.log2(len(psi1))))
 
     if norm1 < 1e-12 or norm2 < 1e-12 or sprob < 1e-15:
         integral_mean = 0.0
@@ -480,6 +482,8 @@ def quantum_hsgp_integral(
             n_eigenvalue_qubits=n_eigenvalue_qubits,
             backend=sv_backend,
         )
+    
+    #print("Number of qubits for variance estimation:", int(np.log2(len(psi1_v))))
 
     if norm_z < 1e-12 or sprob_v < 1e-15:
         integral_var = 0.0

@@ -10,27 +10,843 @@
       -4.499999999999998,
       4.499999999999998
     ],
-    "N": 32,
-    "M": 32,
+    "N": 16,
+    "M": 16,
     "L": 5.849999999999998,
-    "length_scale": 0.7954951288348656,
+    "length_scale": 1.1249999999999996,
     "point_strategy": "hybrid",
     "exact": 0.486,
     "exact_err": 9.850313248662373e-14,
-    "gpq_mean": 0.5227846091792685,
-    "gpq_var": 0.008598019127944667,
-    "hsgp_mean": 0.5247896237834749,
-    "hsgp_var": 0.0084130728550348,
-    "quantum_analytical_mean": 0.5247895696473699,
-    "quantum_analytical_var": 0.008413072854996796,
-    "quantum_mean": 0.4684781360263262,
-    "quantum_var": 0.013846622902859,
+    "gpq_mean": -0.03225190139124834,
+    "gpq_var": 0.497967686516958,
+    "hsgp_mean": -0.46163031493619855,
+    "hsgp_var": 0.46728500466823003,
+    "quantum_analytical_mean": -0.4616298873635153,
+    "quantum_analytical_var": 0.4672850046683732,
+    "quantum_mean": 0.48020215980917674,
+    "quantum_var": 1.0423136652886862,
     "timings": {
-      "exact": 0.008121199964080006,
-      "gpq": 0.00018670002464205027,
-      "hsgp": 0.0002901999978348613,
-      "quantum_analytical": 0.0008157999836839736,
-      "quantum": 76.29261280002538
+      "exact": 0.008354199992027134,
+      "gpq": 0.0001776000135578215,
+      "hsgp": 0.0002376000047661364,
+      "quantum_analytical": 0.00034820003202185035,
+      "quantum": 9.625961099984124
+    }
+  },
+  {
+    "dist_name": "pareto",
+    "payoff_name": "franchise_deductible",
+    "domain": [
+      1.0,
+      9.999999999999996
+    ],
+    "centered_domain": [
+      -4.499999999999998,
+      4.499999999999998
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 5.849999999999998,
+    "length_scale": 1.1249999999999996,
+    "point_strategy": "hybrid",
+    "exact": 1.485,
+    "exact_err": 9.993194447501473e-10,
+    "gpq_mean": 1.032032994695328,
+    "gpq_var": 0.497967686516958,
+    "hsgp_mean": -1.3507605734323256,
+    "hsgp_var": 0.46728500466823003,
+    "quantum_analytical_mean": -1.3505809261594952,
+    "quantum_analytical_var": 0.4672850046683732,
+    "quantum_mean": 2.532282313813105,
+    "quantum_var": 1.0423136652886862,
+    "timings": {
+      "exact": 0.008487200015224516,
+      "gpq": 0.00015929999062791467,
+      "hsgp": 0.0002597999991849065,
+      "quantum_analytical": 0.00039770000148564577,
+      "quantum": 9.888176099979319
+    }
+  },
+  {
+    "dist_name": "pareto",
+    "payoff_name": "policy_limit",
+    "domain": [
+      1.0,
+      9.999999999999996
+    ],
+    "centered_domain": [
+      -4.499999999999998,
+      4.499999999999998
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 5.849999999999998,
+    "length_scale": 1.1249999999999996,
+    "point_strategy": "hybrid",
+    "exact": 1.4750000000538668,
+    "exact_err": 1.2898198911246956e-08,
+    "gpq_mean": 2.9536003640463377,
+    "gpq_var": 0.497967686516958,
+    "hsgp_mean": 4.322559581979916,
+    "hsgp_var": 0.46728500466823003,
+    "quantum_analytical_mean": 4.322555910865415,
+    "quantum_analytical_var": 0.4672850046683732,
+    "quantum_mean": 1.4662978894616803,
+    "quantum_var": 1.0423136652886862,
+    "timings": {
+      "exact": 0.04064009996363893,
+      "gpq": 0.00016110000433400273,
+      "hsgp": 0.0002617000136524439,
+      "quantum_analytical": 0.00040220003575086594,
+      "quantum": 9.79315719997976
+    }
+  },
+  {
+    "dist_name": "pareto",
+    "payoff_name": "deductible_with_limit",
+    "domain": [
+      1.0,
+      9.999999999999996
+    ],
+    "centered_domain": [
+      -4.499999999999998,
+      4.499999999999998
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 5.849999999999998,
+    "length_scale": 1.1249999999999996,
+    "point_strategy": "hybrid",
+    "exact": 0.4811111111370867,
+    "exact_err": 7.428224907008707e-09,
+    "gpq_mean": -0.03693147466594837,
+    "gpq_var": 0.497967686516958,
+    "hsgp_mean": -0.46635220366852725,
+    "hsgp_var": 0.46728500466823003,
+    "quantum_analytical_mean": -0.46635177609588263,
+    "quantum_analytical_var": 0.4672850046683732,
+    "quantum_mean": 0.48401367464109435,
+    "quantum_var": 1.0423136652886862,
+    "timings": {
+      "exact": 0.04665550001664087,
+      "gpq": 0.00017190002836287022,
+      "hsgp": 0.0002666999935172498,
+      "quantum_analytical": 0.00044790003448724747,
+      "quantum": 10.394467399979476
+    }
+  },
+  {
+    "dist_name": "pareto",
+    "payoff_name": "stop_loss",
+    "domain": [
+      1.0,
+      9.999999999999996
+    ],
+    "centered_domain": [
+      -4.499999999999998,
+      4.499999999999998
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 5.849999999999998,
+    "length_scale": 1.1249999999999996,
+    "point_strategy": "hybrid",
+    "exact": 0.486,
+    "exact_err": 9.850313248662373e-14,
+    "gpq_mean": -0.03225190139124834,
+    "gpq_var": 0.497967686516958,
+    "hsgp_mean": -0.46163031493619855,
+    "hsgp_var": 0.46728500466823003,
+    "quantum_analytical_mean": -0.4616298873635153,
+    "quantum_analytical_var": 0.4672850046683732,
+    "quantum_mean": 0.48020215980917674,
+    "quantum_var": 1.0423136652886862,
+    "timings": {
+      "exact": 0.012209599954076111,
+      "gpq": 0.00016799999866634607,
+      "hsgp": 0.00026459997752681375,
+      "quantum_analytical": 0.0003921000170521438,
+      "quantum": 9.936686200031545
+    }
+  },
+  {
+    "dist_name": "lognormal",
+    "payoff_name": "ordinary_deductible",
+    "domain": [
+      0.0,
+      21.982183979582828
+    ],
+    "centered_domain": [
+      -10.991091989791414,
+      10.991091989791414
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 14.288419586728839,
+    "length_scale": 2.7477729974478535,
+    "point_strategy": "hybrid",
+    "exact": 0.8579739047504147,
+    "exact_err": 1.4072354715180803e-08,
+    "gpq_mean": 1.2615954506056255,
+    "gpq_var": 2.804234836059294,
+    "hsgp_mean": 1.484631235414214,
+    "hsgp_var": 2.633951377864414,
+    "quantum_analytical_mean": 1.48463374266766,
+    "quantum_analytical_var": 2.63395137785688,
+    "quantum_mean": 0.884122232163367,
+    "quantum_var": 21.725334470673317,
+    "timings": {
+      "exact": 0.09546789998421445,
+      "gpq": 0.00015489995712414384,
+      "hsgp": 0.0002634000265970826,
+      "quantum_analytical": 0.0003907000063918531,
+      "quantum": 9.366896499996074
+    }
+  },
+  {
+    "dist_name": "lognormal",
+    "payoff_name": "franchise_deductible",
+    "domain": [
+      0.0,
+      21.982183979582828
+    ],
+    "centered_domain": [
+      -10.991091989791414,
+      10.991091989791414
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 14.288419586728839,
+    "length_scale": 2.7477729974478535,
+    "point_strategy": "hybrid",
+    "exact": 1.3569725786927767,
+    "exact_err": 2.6645352591003757e-14,
+    "gpq_mean": 0.049200129689779715,
+    "gpq_var": 2.804234836059294,
+    "hsgp_mean": 0.8390987646524319,
+    "hsgp_var": 2.633951377864414,
+    "quantum_analytical_mean": 0.8390959592745248,
+    "quantum_analytical_var": 2.63395137785688,
+    "quantum_mean": 1.3957666271727094,
+    "quantum_var": 21.725334470673317,
+    "timings": {
+      "exact": 0.10007630003383383,
+      "gpq": 0.000195200031157583,
+      "hsgp": 0.0002766999532468617,
+      "quantum_analytical": 0.0003934000269509852,
+      "quantum": 9.333208700001705
+    }
+  },
+  {
+    "dist_name": "lognormal",
+    "payoff_name": "policy_limit",
+    "domain": [
+      0.0,
+      21.982183979582828
+    ],
+    "centered_domain": [
+      -10.991091989791414,
+      10.991091989791414
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 14.288419586728839,
+    "length_scale": 2.7477729974478535,
+    "point_strategy": "hybrid",
+    "exact": 1.4655262805158773,
+    "exact_err": 5.025937072476498e-09,
+    "gpq_mean": 1.324760303246876,
+    "gpq_var": 2.804234836059294,
+    "hsgp_mean": 0.7525962781344773,
+    "hsgp_var": 2.633951377864414,
+    "quantum_analytical_mean": 0.752600233255288,
+    "quantum_analytical_var": 2.63395137785688,
+    "quantum_mean": 1.4861893324941642,
+    "quantum_var": 21.725334470673317,
+    "timings": {
+      "exact": 0.07330720004392788,
+      "gpq": 0.0001564000267535448,
+      "hsgp": 0.0002674999996088445,
+      "quantum_analytical": 0.0004282000008970499,
+      "quantum": 9.849884199968074
+    }
+  },
+  {
+    "dist_name": "lognormal",
+    "payoff_name": "deductible_with_limit",
+    "domain": [
+      0.0,
+      21.982183979582828
+    ],
+    "centered_domain": [
+      -10.991091989791414,
+      10.991091989791414
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 14.288419586728839,
+    "length_scale": 2.7477729974478535,
+    "point_strategy": "hybrid",
+    "exact": 0.7484181837430338,
+    "exact_err": 1.4072353458526958e-08,
+    "gpq_mean": 1.1732227092134053,
+    "gpq_var": 2.804234836059294,
+    "hsgp_mean": 1.3960846679912693,
+    "hsgp_var": 2.633951377864414,
+    "quantum_analytical_mean": 1.3960871752446675,
+    "quantum_analytical_var": 2.63395137785688,
+    "quantum_mean": 0.8546726576058365,
+    "quantum_var": 21.725334470673317,
+    "timings": {
+      "exact": 0.15640850004274398,
+      "gpq": 0.00018339999951422215,
+      "hsgp": 0.0003464000183157623,
+      "quantum_analytical": 0.0004507999983616173,
+      "quantum": 10.321758400008548
+    }
+  },
+  {
+    "dist_name": "lognormal",
+    "payoff_name": "stop_loss",
+    "domain": [
+      0.0,
+      21.982183979582828
+    ],
+    "centered_domain": [
+      -10.991091989791414,
+      10.991091989791414
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 14.288419586728839,
+    "length_scale": 2.7477729974478535,
+    "point_strategy": "hybrid",
+    "exact": 0.8579739047504147,
+    "exact_err": 1.4072354715180803e-08,
+    "gpq_mean": 1.2615954506056255,
+    "gpq_var": 2.804234836059294,
+    "hsgp_mean": 1.484631235414214,
+    "hsgp_var": 2.633951377864414,
+    "quantum_analytical_mean": 1.48463374266766,
+    "quantum_analytical_var": 2.63395137785688,
+    "quantum_mean": 0.884122232163367,
+    "quantum_var": 21.725334470673317,
+    "timings": {
+      "exact": 0.08711439999751747,
+      "gpq": 0.00017900002421811223,
+      "hsgp": 0.00031650002347305417,
+      "quantum_analytical": 0.0005154999671503901,
+      "quantum": 9.946585199970286
+    }
+  },
+  {
+    "dist_name": "gamma",
+    "payoff_name": "ordinary_deductible",
+    "domain": [
+      0.0,
+      9.233413476451585
+    ],
+    "centered_domain": [
+      -4.616706738225792,
+      4.616706738225792
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 6.00171875969353,
+    "length_scale": 1.154176684556448,
+    "point_strategy": "hybrid",
+    "exact": 1.0943071914960318,
+    "exact_err": 1.0871538780321544e-08,
+    "gpq_mean": 0.9287131433538889,
+    "gpq_var": 0.4093118478630231,
+    "hsgp_mean": 0.9382247293205861,
+    "hsgp_var": 0.37967654990557126,
+    "quantum_analytical_mean": 0.9382206392624538,
+    "quantum_analytical_var": 0.37967654990517796,
+    "quantum_mean": 1.2098135703632702,
+    "quantum_var": 0.9185530711873562,
+    "timings": {
+      "exact": 0.04802589997416362,
+      "gpq": 0.0002057999954558909,
+      "hsgp": 0.0003624000237323344,
+      "quantum_analytical": 0.00042340002255514264,
+      "quantum": 9.772172599972691
+    }
+  },
+  {
+    "dist_name": "gamma",
+    "payoff_name": "franchise_deductible",
+    "domain": [
+      0.0,
+      9.233413476451585
+    ],
+    "centered_domain": [
+      -4.616706738225792,
+      4.616706738225792
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 6.00171875969353,
+    "length_scale": 1.154176684556448,
+    "point_strategy": "hybrid",
+    "exact": 1.829066071877044,
+    "exact_err": 2.3500523749220292e-08,
+    "gpq_mean": 1.420260788120686,
+    "gpq_var": 0.4093118478630231,
+    "hsgp_mean": 1.445731825903593,
+    "hsgp_var": 0.37967654990557126,
+    "quantum_analytical_mean": 1.4456938778091017,
+    "quantum_analytical_var": 0.37967654990517796,
+    "quantum_mean": 1.6020178702658623,
+    "quantum_var": 0.9185530711873562,
+    "timings": {
+      "exact": 0.09282589994836599,
+      "gpq": 0.00016270001651719213,
+      "hsgp": 0.0002747999969869852,
+      "quantum_analytical": 0.00040090002585202456,
+      "quantum": 9.57507349998923
+    }
+  },
+  {
+    "dist_name": "gamma",
+    "payoff_name": "policy_limit",
+    "domain": [
+      0.0,
+      9.233413476451585
+    ],
+    "centered_domain": [
+      -4.616706738225792,
+      4.616706738225792
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 6.00171875969353,
+    "length_scale": 1.154176684556448,
+    "point_strategy": "hybrid",
+    "exact": 1.9478343710072936,
+    "exact_err": 3.9312634441876626e-10,
+    "gpq_mean": 1.7546309033200487,
+    "gpq_var": 0.4093118478630231,
+    "hsgp_mean": 1.7475344563087338,
+    "hsgp_var": 0.37967654990557126,
+    "quantum_analytical_mean": 1.7475356641918112,
+    "quantum_analytical_var": 0.37967654990517796,
+    "quantum_mean": 1.9176766436673303,
+    "quantum_var": 0.9185530711873562,
+    "timings": {
+      "exact": 0.03848339995602146,
+      "gpq": 0.00015879998682066798,
+      "hsgp": 0.0002652999828569591,
+      "quantum_analytical": 0.00039379997178912163,
+      "quantum": 9.383340500004124
+    }
+  },
+  {
+    "dist_name": "gamma",
+    "payoff_name": "deductible_with_limit",
+    "domain": [
+      0.0,
+      9.233413476451585
+    ],
+    "centered_domain": [
+      -4.616706738225792,
+      4.616706738225792
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 6.00171875969353,
+    "length_scale": 1.154176684556448,
+    "point_strategy": "hybrid",
+    "exact": 1.0788083093197212,
+    "exact_err": 7.890320841141829e-09,
+    "gpq_mean": 0.9108827247520139,
+    "gpq_var": 0.4093118478630231,
+    "hsgp_mean": 0.9203107958695256,
+    "hsgp_var": 0.37967654990557126,
+    "quantum_analytical_mean": 0.9203067058117952,
+    "quantum_analytical_var": 0.37967654990517796,
+    "quantum_mean": 1.197875641957279,
+    "quantum_var": 0.9185530711873562,
+    "timings": {
+      "exact": 0.07891620002919808,
+      "gpq": 0.00016009999671950936,
+      "hsgp": 0.0002634000265970826,
+      "quantum_analytical": 0.00040169997373595834,
+      "quantum": 9.336714599980041
+    }
+  },
+  {
+    "dist_name": "gamma",
+    "payoff_name": "stop_loss",
+    "domain": [
+      0.0,
+      9.233413476451585
+    ],
+    "centered_domain": [
+      -4.616706738225792,
+      4.616706738225792
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 6.00171875969353,
+    "length_scale": 1.154176684556448,
+    "point_strategy": "hybrid",
+    "exact": 1.0943071914960318,
+    "exact_err": 1.0871538780321544e-08,
+    "gpq_mean": 0.9287131433538889,
+    "gpq_var": 0.4093118478630231,
+    "hsgp_mean": 0.9382247293205861,
+    "hsgp_var": 0.37967654990557126,
+    "quantum_analytical_mean": 0.9382206392624538,
+    "quantum_analytical_var": 0.37967654990517796,
+    "quantum_mean": 1.2098135703632702,
+    "quantum_var": 0.9185530711873562,
+    "timings": {
+      "exact": 0.045010400004684925,
+      "gpq": 0.00015899998834356666,
+      "hsgp": 0.00026489997981116176,
+      "quantum_analytical": 0.0003874000394716859,
+      "quantum": 9.365072899963707
+    }
+  },
+  {
+    "dist_name": "weibull",
+    "payoff_name": "ordinary_deductible",
+    "domain": [
+      0.0,
+      7.2541738246789516
+    ],
+    "centered_domain": [
+      -3.6270869123394758,
+      3.6270869123394758
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 4.715212986041319,
+    "length_scale": 0.9067717280848689,
+    "point_strategy": "hybrid",
+    "exact": 0.9256128274064236,
+    "exact_err": 1.3779997143359424e-08,
+    "gpq_mean": 0.8993477753564321,
+    "gpq_var": 0.25586951914682743,
+    "hsgp_mean": 0.9014365854502473,
+    "hsgp_var": 0.23760436394961448,
+    "quantum_analytical_mean": 0.9014367177939023,
+    "quantum_analytical_var": 0.23760436394968404,
+    "quantum_mean": 0.8982331493438066,
+    "quantum_var": 0.11154730755097647,
+    "timings": {
+      "exact": 0.047944000049028546,
+      "gpq": 0.00017559999832883477,
+      "hsgp": 0.0002778000198304653,
+      "quantum_analytical": 0.0004113000468350947,
+      "quantum": 9.61427590000676
+    }
+  },
+  {
+    "dist_name": "weibull",
+    "payoff_name": "franchise_deductible",
+    "domain": [
+      0.0,
+      7.2541738246789516
+    ],
+    "centered_domain": [
+      -3.6270869123394758,
+      3.6270869123394758
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 4.715212986041319,
+    "length_scale": 0.9067717280848689,
+    "point_strategy": "hybrid",
+    "exact": 1.6268013317246828,
+    "exact_err": 2.1537825301010116e-08,
+    "gpq_mean": 1.6975277658048071,
+    "gpq_var": 0.25586951914682743,
+    "hsgp_mean": 1.7308236738894638,
+    "hsgp_var": 0.23760436394961448,
+    "quantum_analytical_mean": 1.7308303983122781,
+    "quantum_analytical_var": 0.23760436394968404,
+    "quantum_mean": 1.6654123321164294,
+    "quantum_var": 0.11154730755097647,
+    "timings": {
+      "exact": 0.08530689997132868,
+      "gpq": 0.0001604999997653067,
+      "hsgp": 0.00031099998159334064,
+      "quantum_analytical": 0.0006602000212296844,
+      "quantum": 9.624529400025494
+    }
+  },
+  {
+    "dist_name": "weibull",
+    "payoff_name": "policy_limit",
+    "domain": [
+      0.0,
+      7.2541738246789516
+    ],
+    "centered_domain": [
+      -3.6270869123394758,
+      3.6270869123394758
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 4.715212986041319,
+    "length_scale": 0.9067717280848689,
+    "point_strategy": "hybrid",
+    "exact": 1.7853605191923019,
+    "exact_err": 1.2689411697418848e-08,
+    "gpq_mean": 1.7259762612945906,
+    "gpq_var": 0.25586951914682743,
+    "hsgp_mean": 1.7240204776693784,
+    "hsgp_var": 0.23760436394961448,
+    "quantum_analytical_mean": 1.7240208451439805,
+    "quantum_analytical_var": 0.23760436394968404,
+    "quantum_mean": 1.752228073288135,
+    "quantum_var": 0.11154730755097647,
+    "timings": {
+      "exact": 0.055065999971702695,
+      "gpq": 0.000159399991389364,
+      "hsgp": 0.0002625000197440386,
+      "quantum_analytical": 0.0003875000402331352,
+      "quantum": 9.94430780003313
+    }
+  },
+  {
+    "dist_name": "weibull",
+    "payoff_name": "deductible_with_limit",
+    "domain": [
+      0.0,
+      7.2541738246789516
+    ],
+    "centered_domain": [
+      -3.6270869123394758,
+      3.6270869123394758
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 4.715212986041319,
+    "length_scale": 0.9067717280848689,
+    "point_strategy": "hybrid",
+    "exact": 0.9234985804117545,
+    "exact_err": 1.3779997143359424e-08,
+    "gpq_mean": 0.8977532293745298,
+    "gpq_var": 0.25586951914682743,
+    "hsgp_mean": 0.8997810095336785,
+    "hsgp_var": 0.23760436394961448,
+    "quantum_analytical_mean": 0.8997811418772228,
+    "quantum_analytical_var": 0.23760436394968404,
+    "quantum_mean": 0.896769427337989,
+    "quantum_var": 0.11154730755097647,
+    "timings": {
+      "exact": 0.07291520002763718,
+      "gpq": 0.00018020003335550427,
+      "hsgp": 0.0003092999686487019,
+      "quantum_analytical": 0.000464899989310652,
+      "quantum": 10.019050399947446
+    }
+  },
+  {
+    "dist_name": "weibull",
+    "payoff_name": "stop_loss",
+    "domain": [
+      0.0,
+      7.2541738246789516
+    ],
+    "centered_domain": [
+      -3.6270869123394758,
+      3.6270869123394758
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 4.715212986041319,
+    "length_scale": 0.9067717280848689,
+    "point_strategy": "hybrid",
+    "exact": 0.9256128274064236,
+    "exact_err": 1.3779997143359424e-08,
+    "gpq_mean": 0.8993477753564321,
+    "gpq_var": 0.25586951914682743,
+    "hsgp_mean": 0.9014365854502473,
+    "hsgp_var": 0.23760436394961448,
+    "quantum_analytical_mean": 0.9014367177939023,
+    "quantum_analytical_var": 0.23760436394968404,
+    "quantum_mean": 0.8982331493438066,
+    "quantum_var": 0.11154730755097647,
+    "timings": {
+      "exact": 0.05344709998462349,
+      "gpq": 0.00015849998453631997,
+      "hsgp": 0.00027169997338205576,
+      "quantum_analytical": 0.0003934999695047736,
+      "quantum": 10.064995200023986
+    }
+  },
+  {
+    "dist_name": "poisson",
+    "payoff_name": "ordinary_deductible",
+    "domain": [
+      0.0,
+      13.0
+    ],
+    "centered_domain": [
+      -6.5,
+      6.5
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 8.450000000000001,
+    "length_scale": 1.625,
+    "point_strategy": "hybrid",
+    "exact": 4.477112940454806,
+    "exact_err": 6.482277203900821e-08,
+    "gpq_mean": 3.9353569493114264,
+    "gpq_var": 0.1151665996886635,
+    "hsgp_mean": 3.957561642451832,
+    "hsgp_var": 0.09634389114603395,
+    "quantum_analytical_mean": 3.9575616424525673,
+    "quantum_analytical_var": 0.09634389114595084,
+    "quantum_mean": 4.468270982464657,
+    "quantum_var": 1.8127132959489418,
+    "timings": {
+      "exact": 0.39810099999886006,
+      "gpq": 0.00020179996499791741,
+      "hsgp": 0.0002300000051036477,
+      "quantum_analytical": 0.00030829996103420854,
+      "quantum": 10.13893439999083
+    }
+  },
+  {
+    "dist_name": "poisson",
+    "payoff_name": "franchise_deductible",
+    "domain": [
+      0.0,
+      13.0
+    ],
+    "centered_domain": [
+      -6.5,
+      6.5
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 8.450000000000001,
+    "length_scale": 1.625,
+    "point_strategy": "hybrid",
+    "exact": 5.468356141720746,
+    "exact_err": 6.544622532800304e-08,
+    "gpq_mean": 4.958392127289699,
+    "gpq_var": 0.1151665996886635,
+    "hsgp_mean": 4.972511792451735,
+    "hsgp_var": 0.09634389114603395,
+    "quantum_analytical_mean": 4.972511792452521,
+    "quantum_analytical_var": 0.09634389114595084,
+    "quantum_mean": 5.561110993917406,
+    "quantum_var": 1.8127132959489418,
+    "timings": {
+      "exact": 0.44607649999670684,
+      "gpq": 0.00014760001795366406,
+      "hsgp": 0.00020910002058371902,
+      "quantum_analytical": 0.0003100999747402966,
+      "quantum": 10.491073800018057
+    }
+  },
+  {
+    "dist_name": "poisson",
+    "payoff_name": "policy_limit",
+    "domain": [
+      0.0,
+      13.0
+    ],
+    "centered_domain": [
+      -6.5,
+      6.5
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 8.450000000000001,
+    "length_scale": 1.625,
+    "point_strategy": "hybrid",
+    "exact": 4.332815538975785,
+    "exact_err": 3.474523513347094e-08,
+    "gpq_mean": 4.2095043470344535,
+    "gpq_var": 0.1151665996886635,
+    "hsgp_mean": 4.203545589246828,
+    "hsgp_var": 0.09634389114603395,
+    "quantum_analytical_mean": 4.203545589247266,
+    "quantum_analytical_var": 0.09634389114595084,
+    "quantum_mean": 4.154650022277099,
+    "quantum_var": 1.8127132959489418,
+    "timings": {
+      "exact": 0.46623839996755123,
+      "gpq": 0.00013619998935610056,
+      "hsgp": 0.00021130003733560443,
+      "quantum_analytical": 0.00030130002414807677,
+      "quantum": 10.054425900045317
+    }
+  },
+  {
+    "dist_name": "poisson",
+    "payoff_name": "deductible_with_limit",
+    "domain": [
+      0.0,
+      13.0
+    ],
+    "centered_domain": [
+      -6.5,
+      6.5
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 8.450000000000001,
+    "length_scale": 1.625,
+    "point_strategy": "hybrid",
+    "exact": 3.8079575392809466,
+    "exact_err": 6.928009277373803e-09,
+    "gpq_mean": 3.6982338051357146,
+    "gpq_var": 0.1151665996886635,
+    "hsgp_mean": 3.7024312211860084,
+    "hsgp_var": 0.09634389114603395,
+    "quantum_analytical_mean": 3.7024312211864254,
+    "quantum_analytical_var": 0.09634389114595084,
+    "quantum_mean": 3.7321243020154378,
+    "quantum_var": 1.8127132959489418,
+    "timings": {
+      "exact": 0.5397677999571897,
+      "gpq": 0.00018440000712871552,
+      "hsgp": 0.00024129997473210096,
+      "quantum_analytical": 0.0005230000242590904,
+      "quantum": 9.876045199984219
+    }
+  },
+  {
+    "dist_name": "poisson",
+    "payoff_name": "stop_loss",
+    "domain": [
+      0.0,
+      13.0
+    ],
+    "centered_domain": [
+      -6.5,
+      6.5
+    ],
+    "N": 16,
+    "M": 16,
+    "L": 8.450000000000001,
+    "length_scale": 1.625,
+    "point_strategy": "hybrid",
+    "exact": 4.477112940454806,
+    "exact_err": 6.482277203900821e-08,
+    "gpq_mean": 3.9353569493114264,
+    "gpq_var": 0.1151665996886635,
+    "hsgp_mean": 3.957561642451832,
+    "hsgp_var": 0.09634389114603395,
+    "quantum_analytical_mean": 3.9575616424525673,
+    "quantum_analytical_var": 0.09634389114595084,
+    "quantum_mean": 4.468270982464657,
+    "quantum_var": 1.8127132959489418,
+    "timings": {
+      "exact": 0.41183719999389723,
+      "gpq": 0.00014489999739453197,
+      "hsgp": 0.0002072000061161816,
+      "quantum_analytical": 0.000312299991492182,
+      "quantum": 9.555679299985059
     }
   }
 ]
