@@ -9,10 +9,23 @@ def plot_integrand(integrand, domain, X_eval, y_eval):
     """Plot the integrand, training points, and shaded integration area."""
     import matplotlib.pyplot as plt
 
+    plt.rcParams.update({
+        "font.family": "serif",
+        "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
+        "mathtext.fontset": "stix",
+        "font.size": 16,
+        "axes.labelsize": 16,
+        "axes.titlesize": 16,
+        "xtick.labelsize": 14,
+        "ytick.labelsize": 14,
+        "legend.fontsize": 14,
+        "figure.dpi": 600,
+    })
+
     z = np.linspace(domain[0], domain[1], 500)
     g = integrand(z)
 
-    fig, ax = plt.subplots(figsize=(10, 4))
+    fig, ax = plt.subplots(figsize=(10, 5))
     ax.fill_between(z, g, alpha=0.15, color="steelblue")
     ax.plot(z, g, "steelblue", lw=2, label=r"$\Pi(z)\,f_Z(z)$")
     ax.plot(X_eval.ravel(), y_eval, "rx", ms=7, label="Noisy observations")

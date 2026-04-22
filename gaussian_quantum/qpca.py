@@ -120,10 +120,17 @@ def qpe_circuit(unitary_matrix, n_eigenvalue_qubits, n_state_qubits):
         qc.h(q)
 
     # Controlled-U^{2^k}
+    #for k in range(tau):
+    #    power = 2 ** k
+    #    U_pow = np.linalg.matrix_power(unitary_matrix, power)
+    #    cu = UnitaryGate(U_pow, label=f"U^{power}").control(1)
+    #    qc.append(cu, [k] + list(range(tau, total)))
+
+    u_gate = UnitaryGate(unitary_matrix, label="U")
+
     for k in range(tau):
         power = 2 ** k
-        U_pow = np.linalg.matrix_power(unitary_matrix, power)
-        cu = UnitaryGate(U_pow, label=f"U^{power}").control(1)
+        cu = u_gate.power(power).control(1)
         qc.append(cu, [k] + list(range(tau, total)))
 
     # Inverse QFT on eigenvalue register

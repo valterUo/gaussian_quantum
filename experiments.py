@@ -214,7 +214,7 @@ def run_experiment(
         t0 = time.perf_counter()
         q_mean, q_var = quantum_hsgp_integral(
             q_X_eval, q_y_eval, centered_domain, quantum_M, L, q_noise_var,
-            length_scale=quantum_length_scale, amplitude=amplitude,
+            length_scale=length_scale, amplitude=amplitude,
             n_eigenvalue_qubits=n_eigenvalue_qubits, shots=shots, seed=seed,
         )
         timings["quantum"] = time.perf_counter() - t0
