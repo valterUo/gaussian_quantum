@@ -22,6 +22,41 @@ EXPERIMENT_DIST_PARAMS = {
 }
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _sample_points(dist, a, b, N, strategy):
+    """Sample N evaluation points covering [a, b] using the given strategy.
+
+    For the hybrid strategy the uniform component's lower bound is clipped to
+    the 1e-6 quantile of *dist*, avoiding near-zero-density regions such as
+    x≈0 for lognormal or gamma where the integrand is effectively zero.
+    """
+    if strategy == "hybrid":
+        n_q = int(0.7 * N)
+        n_u = N - n_q
+        probs_q = np.linspace(1.0 / (n_q + 1), n_q / (n_q + 1), n_q)
+        X_quantile = np.clip(dist.ppf(probs_q), a, b)
+        # Clip the uniform grid's lower bound to the effective support so we
+        # don't waste points in the zero-density region (e.g. x≈0 for lognormal).
+        a_u = max(float(a), float(dist.ppf(1e-6)))
+        X_uniform = np.linspace(a_u, b, n_u)
+        X_raw = np.sort(np.unique(np.concatenate([X_quantile, X_uniform])))
+        if len(X_raw) > N:
+            idx = np.round(np.linspace(0, len(X_raw) - 1, N)).astype(int)
+            X_raw = X_raw[idx]
+        elif len(X_raw) < N:
+            X_fill = np.linspace(a, b, N - len(X_raw) + 2)[1:-1]
+            X_raw = np.sort(np.unique(np.concatenate([X_raw, X_fill])))[:N]
+    elif strategy == "quantile":
+        probs = np.linspace(1.0 / (N + 1), N / (N + 1), N)
+        X_raw = np.clip(dist.ppf(probs), a, b)
+    else:
+        X_raw = np.linspace(a, b, N)
+    return X_raw
+
+
+# ---------------------------------------------------------------------------
 # Single-experiment runner
 # ---------------------------------------------------------------------------
 
@@ -35,7 +70,7 @@ def run_experiment(
     L=None,
     noise_std=0.01,
     length_scale=None,
-    amplitude=1.0,
+    amplitude=None,
     run_quantum=False,
     run_quantum_analytical=False,
     n_eigenvalue_qubits=8,
@@ -74,29 +109,7 @@ def run_experiment(
 
     # ── Evaluation points and noisy observations ──────────────────────────
     rng = np.random.default_rng(seed)
-    if point_strategy == "hybrid":
-        # 70 % quantile points (dense where the PDF peaks) merged with
-        # 30 % uniform points (to cover the tail of the domain).
-        n_q = int(0.7 * N)
-        n_u = N - n_q
-        probs_q = np.linspace(1.0 / (n_q + 1), n_q / (n_q + 1), n_q)
-        X_quantile = np.clip(dist.ppf(probs_q), a, b)
-        X_uniform = np.linspace(a, b, n_u)
-        X_raw = np.sort(np.unique(np.concatenate([X_quantile, X_uniform])))
-        # Ensure exactly N points
-        if len(X_raw) > N:
-            idx = np.round(np.linspace(0, len(X_raw) - 1, N)).astype(int)
-            X_raw = X_raw[idx]
-        elif len(X_raw) < N:
-            X_fill = np.linspace(a, b, N - len(X_raw) + 2)[1:-1]
-            X_raw = np.sort(np.unique(np.concatenate([X_raw, X_fill])))[:N]
-    elif point_strategy == "quantile":
-        # Place points at distribution quantiles so they concentrate
-        # where the PDF has the most mass (critical for heavy-tailed dists).
-        probs = np.linspace(1.0 / (N + 1), N / (N + 1), N)
-        X_raw = np.clip(dist.ppf(probs), a, b)
-    else:
-        X_raw = np.linspace(a, b, N)
+    X_raw = _sample_points(dist, a, b, N, point_strategy)
 
     y_eval = np.squeeze(integrand(X_raw))
     y_eval = y_eval + rng.normal(0.0, noise_std, size=y_eval.shape)
@@ -104,10 +117,17 @@ def run_experiment(
     # Centre evaluation points to match the centred domain
     X_eval = (X_raw - midpoint).reshape(-1, 1)
 
-    # ── Auto kernel length scale ──────────────────────────────────────────
+    # ── Auto kernel hyperparameters ────────────────────────────────────────
     if length_scale is None:
         length_scale = half_width / np.sqrt(N)
         length_scale = max(length_scale, 0.3)
+
+    # Set amplitude to the empirical std of the (clean) integrand so the GP
+    # prior is on the right scale.  A prior with amplitude=1 is wildly wrong
+    # for integrands whose values are O(0.01)–O(0.1).
+    if amplitude is None:
+        amplitude = float(np.std(np.squeeze(integrand(X_raw))))
+        amplitude = max(amplitude, 1e-3)  # guard against near-zero integrands
 
     result = {
         "dist_name": dist_name,
@@ -176,24 +196,12 @@ def run_experiment(
     if run_quantum:
         from gaussian_quantum.quantum_algorithms import quantum_hsgp_integral
 
-        # Quantum-specific evaluation points.  Use the same hybrid strategy
-        # as the classical methods: 70 % quantile-placed points (dense where
-        # the PDF peaks, critical for heavy-tailed distributions such as
-        # Pareto) merged with 30 % uniform points to cover the tail.
-        q_n_q = int(0.7 * quantum_N)
-        q_n_u = quantum_N - q_n_q
-        q_probs = np.linspace(1.0 / (q_n_q + 1), q_n_q / (q_n_q + 1), q_n_q)
-        q_X_quantile = np.clip(dist.ppf(q_probs), a, b)
-        q_X_uniform = np.linspace(a, b, q_n_u)
-        q_X_raw = np.sort(np.unique(np.concatenate([q_X_quantile, q_X_uniform])))
-        if len(q_X_raw) > quantum_N:
-            idx = np.round(np.linspace(0, len(q_X_raw) - 1, quantum_N)).astype(int)
-            q_X_raw = q_X_raw[idx]
-        elif len(q_X_raw) < quantum_N:
-            q_X_fill = np.linspace(a, b, quantum_N - len(q_X_raw) + 2)[1:-1]
-            q_X_raw = np.sort(
-                np.unique(np.concatenate([q_X_raw, q_X_fill]))
-            )[:quantum_N]
+        # Reuse the classical evaluation points when quantum_N matches N so
+        # all methods train on identical inputs.  When quantum_N differs,
+        # generate a consistent set via the same _sample_points helper.
+        q_X_raw = X_raw if quantum_N == N else _sample_points(
+            dist, a, b, quantum_N, point_strategy
+        )
 
         q_y_eval = np.squeeze(integrand(q_X_raw))
         q_y_eval = q_y_eval + np.random.default_rng(seed).normal(
@@ -201,20 +209,11 @@ def run_experiment(
         )
         q_noise_var = quantum_noise_std ** 2
 
-        # Centre the quantum domain identically to the classical pipeline.
-        # Using the raw uncentered domain causes eigenfunctions to cover
-        # [-q_L, q_L] with data only in [0, b] — roughly half the support
-        # is empty, halving F² = ‖X‖_F² and collapsing c_mean, which
-        # amplifies shot noise by up to 1/c_mean ≈ 300× at the old defaults.
-        q_midpoint = (a + b) / 2.0
-        q_half_width = (b - a) / 2.0
-        q_L = max(q_half_width * 1.3, 1.0)
-        q_X_eval = (q_X_raw - q_midpoint).reshape(-1, 1)
-        q_centered_domain = (a - q_midpoint, b - q_midpoint)
+        q_X_eval = (q_X_raw - midpoint).reshape(-1, 1)
 
         t0 = time.perf_counter()
         q_mean, q_var = quantum_hsgp_integral(
-            q_X_eval, q_y_eval, q_centered_domain, quantum_M, q_L, q_noise_var,
+            q_X_eval, q_y_eval, centered_domain, quantum_M, L, q_noise_var,
             length_scale=quantum_length_scale, amplitude=amplitude,
             n_eigenvalue_qubits=n_eigenvalue_qubits, shots=shots, seed=seed,
         )
@@ -268,15 +267,22 @@ def run_all_experiments(
                 run_quantum_analytical=run_quantum_analytical,
                 **kwargs,
             )
-            err_gpq = abs(res["exact"] - res["gpq_mean"])
-            err_hsgp = abs(res["exact"] - res["hsgp_mean"])
-            msg = f"exact={res['exact']:.6f}  GPQ_err={err_gpq:.6f}  HSGP_err={err_hsgp:.6f}"
+            mse_gpq = (res["gpq_mean"] - res["exact"]) ** 2 + res["gpq_var"]
+            mse_hsgp = (res["hsgp_mean"] - res["exact"]) ** 2 + res["hsgp_var"]
+            msg = (
+                f"exact={res['exact']:.6f}  "
+                f"GPQ_MSE={mse_gpq:.6f}  "
+                f"HSGP_MSE={mse_hsgp:.6f}"
+            )
             if run_quantum_analytical and "quantum_analytical_mean" in res:
-                err_qa = abs(res["exact"] - res["quantum_analytical_mean"])
-                msg += f"  Q_anl_err={err_qa:.6f}"
+                mse_qa = (
+                    (res["quantum_analytical_mean"] - res["exact"]) ** 2
+                    + res["quantum_analytical_var"]
+                )
+                msg += f"  Q_anl_MSE={mse_qa:.6f}"
             if run_quantum and "quantum_mean" in res:
-                err_q = abs(res["exact"] - res["quantum_mean"])
-                msg += f"  Q_err={err_q:.6f}"
+                mse_q = (res["quantum_mean"] - res["exact"]) ** 2 + res["quantum_var"]
+                msg += f"  Q_MSE={mse_q:.6f}"
             print(msg)
             results.append(res)
     return results

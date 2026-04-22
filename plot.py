@@ -65,18 +65,27 @@ def plot_comparison_gaussians(
     color_Q = "#008080"
     color_QA = "#e07b00"
 
+    def _label(name, mean, var):
+        mse = (mean - exact) ** 2 + var
+        return f"{name} (MSE={mse:.4f})"
+
     methods = [
-        ("GPQ", result["gpq_mean"], result["gpq_var"], color_GPQ, ":"),
-        ("HSGP-BQ", result["hsgp_mean"], result["hsgp_var"], color_HSGP, "--"),
+        (_label("GPQ", result["gpq_mean"], result["gpq_var"]),
+         result["gpq_mean"], result["gpq_var"], color_GPQ, ":"),
+        (_label("HSGP-BQ", result["hsgp_mean"], result["hsgp_var"]),
+         result["hsgp_mean"], result["hsgp_var"], color_HSGP, "--"),
     ]
     if run_quantum_analytical and "quantum_analytical_mean" in result and False:
         methods.append(
-            ("Q-Analytical", result["quantum_analytical_mean"],
+            (_label("Q-Analytical", result["quantum_analytical_mean"],
+                    result["quantum_analytical_var"]),
+             result["quantum_analytical_mean"],
              result["quantum_analytical_var"], color_QA, "-."),
         )
     if run_quantum and "quantum_mean" in result:
         methods.append(
-            ("Quantum", result["quantum_mean"], result["quantum_var"], color_Q, "-"),
+            (_label("Quantum", result["quantum_mean"], result["quantum_var"]),
+             result["quantum_mean"], result["quantum_var"], color_Q, "-"),
         )
 
     # Determine plotting range
@@ -100,6 +109,7 @@ def plot_comparison_gaussians(
         else:
             peak_plot = peak
             label_plot = label
+
 
         if use_log:
             pdf = np.clip(pdf, clip_min, None)
@@ -131,19 +141,21 @@ def plot_comparison_gaussians(
 # Printing / Reporting
 # ---------------------------------------------------------------------------
 
+def _mse(r, method):
+    """Compute MSE = bias² + variance for a result dict and method prefix."""
+    return (r[f"{method}_mean"] - r["exact"]) ** 2 + r[f"{method}_var"]
+
+
 def print_summary_table(results, run_quantum=False, run_quantum_analytical=False):
-    """Print a tabular summary of results."""
+    """Print a tabular summary of results using MSE = bias² + variance."""
     header = (
         f"{'Distribution':>12s}  {'Payoff':>25s}  "
-        f"{'Exact':>10s}  {'GPQ':>10s}  {'HSGP':>10s}"
+        f"{'Exact':>10s}  {'GPQ_MSE':>10s}  {'HSGP_MSE':>10s}"
     )
-    if run_quantum:
-        header += f"  {'Quantum':>10s}"
-    header += f"  {'GPQ_err':>10s}  {'HSGP_err':>10s}"
-    if run_quantum:
-        header += f"  {'Q_err':>10s}"
     if run_quantum_analytical:
-        header += f"  {'QA_err':>10s}"
+        header += f"  {'QA_MSE':>10s}"
+    if run_quantum:
+        header += f"  {'Q_MSE':>10s}"
 
     print("\n" + "=" * len(header))
     print(header)
@@ -152,23 +164,15 @@ def print_summary_table(results, run_quantum=False, run_quantum_analytical=False
     for r in results:
         line = (
             f"{r['dist_name']:>12s}  {r['payoff_name']:>25s}  "
-            f"{r['exact']:10.6f}  {r['gpq_mean']:10.6f}  {r['hsgp_mean']:10.6f}"
+            f"{r['exact']:10.6f}  {_mse(r, 'gpq'):10.6f}  {_mse(r, 'hsgp'):10.6f}"
         )
-        if run_quantum and "quantum_mean" in r:
-            line += f"  {r['quantum_mean']:10.6f}"
-        elif run_quantum:
-            line += f"  {'N/A':>10s}"
-        line += (
-            f"  {abs(r['exact'] - r['gpq_mean']):10.6f}"
-            f"  {abs(r['exact'] - r['hsgp_mean']):10.6f}"
-        )
-        if run_quantum and "quantum_mean" in r:
-            line += f"  {abs(r['exact'] - r['quantum_mean']):10.6f}"
-        elif run_quantum:
-            line += f"  {'N/A':>10s}"
         if run_quantum_analytical and "quantum_analytical_mean" in r:
-            line += f"  {abs(r['exact'] - r['quantum_analytical_mean']):10.6f}"
+            line += f"  {_mse(r, 'quantum_analytical'):10.6f}"
         elif run_quantum_analytical:
+            line += f"  {'N/A':>10s}"
+        if run_quantum and "quantum_mean" in r:
+            line += f"  {_mse(r, 'quantum'):10.6f}"
+        elif run_quantum:
             line += f"  {'N/A':>10s}"
         print(line)
 
@@ -199,23 +203,33 @@ def process_results_for_statistics(results, out_dir="figures"):
     with open(os.path.join(out_dir, "results_raw.json"), "w") as f:
         json.dump([_serialisable(r) for r in results], f, indent=2)
 
-    # ── Percentage error statistics per method ──────────────────────────
+    # ── MSE and percentage-error statistics per method ───────────────────
     stats = {}
     error_rows = []
     for method in ["gpq", "hsgp", "quantum_analytical", "quantum"]:
         method_key = f"{method}_mean"
+        var_key = f"{method}_var"
         if method_key in results[0]:
             pct_errors = [
                 abs(r["exact"] - r[method_key]) / abs(r["exact"]) * 100
                 if r["exact"] != 0 else float("nan")
                 for r in results
             ]
+            mse_vals = [
+                (r[method_key] - r["exact"]) ** 2 + r.get(var_key, 0.0)
+                for r in results
+            ]
             pct_errors = np.array(pct_errors, dtype=float)
+            mse_vals = np.array(mse_vals, dtype=float)
             stats[method] = {
                 "mean_pct_err": float(np.nanmean(pct_errors)),
                 "median_pct_err": float(np.nanmedian(pct_errors)),
                 "max_pct_err": float(np.nanmax(pct_errors)),
                 "min_pct_err": float(np.nanmin(pct_errors)),
+                "mean_mse": float(np.nanmean(mse_vals)),
+                "median_mse": float(np.nanmedian(mse_vals)),
+                "max_mse": float(np.nanmax(mse_vals)),
+                "min_mse": float(np.nanmin(mse_vals)),
             }
             error_rows.append({"method": method, **stats[method]})
 
@@ -232,14 +246,21 @@ def process_results_for_statistics(results, out_dir="figures"):
 
     mean_cols = ["exact"] + [c for c in df.columns if c.endswith("_mean")]
 
-    # Relative percentage errors compared to exact for each method
+    # Relative percentage errors and MSE compared to exact for each method
     error_cols = [c for c in df.columns if c.endswith("_mean")]
     err_df = df[["dist_name", "payoff_name"]].copy()
     for col in error_cols:
-        err_df[col.replace("_mean", "_pct_err")] = (
+        method = col[: -len("_mean")]
+        err_df[f"{method}_pct_err"] = (
             (df[col] - df["exact"]).abs() / df["exact"].abs().replace(0, np.nan) * 100
         )
+        var_col = f"{method}_var"
+        if var_col in df.columns:
+            err_df[f"{method}_mse"] = (
+                (df[col] - df["exact"]) ** 2 + df[var_col]
+            )
     pct_err_cols = [c for c in err_df.columns if c.endswith("_pct_err")]
+    mse_cols = [c for c in err_df.columns if c.endswith("_mse")]
 
     # Mean percentage error grouped by distribution
     stats["mean_pct_err_by_distribution"] = err_df.groupby("dist_name")[pct_err_cols].mean()
@@ -252,6 +273,17 @@ def process_results_for_statistics(results, out_dir="figures"):
     stats["mean_pct_err_by_payoff"].to_csv(
         os.path.join(out_dir, "stats_by_payoff.csv"),
     )
+
+    # Mean MSE grouped by distribution and payoff type
+    if mse_cols:
+        stats["mean_mse_by_distribution"] = err_df.groupby("dist_name")[mse_cols].mean()
+        stats["mean_mse_by_distribution"].to_csv(
+            os.path.join(out_dir, "stats_mse_by_distribution.csv"),
+        )
+        stats["mean_mse_by_payoff"] = err_df.groupby("payoff_name")[mse_cols].mean()
+        stats["mean_mse_by_payoff"].to_csv(
+            os.path.join(out_dir, "stats_mse_by_payoff.csv"),
+        )
 
     return stats
 
@@ -299,26 +331,13 @@ def save_plots(
         )
         a, b = domain[0], domain[1]
 
-        if point_strategy == "hybrid":
-            n_q = int(0.7 * N)
-            n_u = N - n_q
-            probs_q = np.linspace(1.0 / (n_q + 1), n_q / (n_q + 1), n_q)
-            Xq = np.clip(dist_obj.ppf(probs_q), a, b)
-            Xu = np.linspace(a, b, n_u)
-            X_raw = np.sort(np.unique(np.concatenate([Xq, Xu])))
-            if len(X_raw) > N:
-                idx = np.round(np.linspace(0, len(X_raw) - 1, N)).astype(int)
-                X_raw = X_raw[idx]
-            X_eval = X_raw.reshape(-1, 1)
-        elif point_strategy == "quantile":
-            probs = np.linspace(1.0 / (N + 1), N / (N + 1), N)
-            X_eval = np.clip(dist_obj.ppf(probs), a, b).reshape(-1, 1)
-        else:
-            X_eval = np.linspace(a, b, N).reshape(-1, 1)
+        # Mirror the sampling logic from experiments._sample_points so the
+        # plot training points match what was actually used in the experiment.
+        from experiments import _sample_points
+        X_raw = _sample_points(dist_obj, a, b, N, point_strategy)
+        X_eval = X_raw.reshape(-1, 1)
 
-        y_eval = integrand(X_eval.ravel()) + rng.normal(
-            0.0, noise_std, size=len(X_eval),
-        )
+        y_eval = integrand(X_raw) + rng.normal(0.0, noise_std, size=len(X_raw))
         tag = f"{r['dist_name']}_{r['payoff_name']}"
 
         fig1 = plot_integrand(
