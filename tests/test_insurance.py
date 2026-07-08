@@ -199,7 +199,7 @@ class TestInsuranceExperiment:
     """Quick smoke test of the full experiment pipeline (classical only)."""
 
     def test_pareto_ordinary_deductible(self):
-        from insurance_experiments import run_experiment
+        from experiments import run_experiment
 
         result = run_experiment(
             dist_name="pareto",
@@ -217,7 +217,7 @@ class TestInsuranceExperiment:
         assert result["exact"] >= 0.0
 
     def test_lognormal_policy_limit(self):
-        from insurance_experiments import run_experiment
+        from experiments import run_experiment
 
         result = run_experiment(
             dist_name="lognormal",

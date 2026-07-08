@@ -33,12 +33,12 @@ PLT_RC = {
     "font.family": "serif",
     "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
     "mathtext.fontset": "stix",
-    "font.size": 16,
-    "axes.labelsize": 16,
-    "axes.titlesize": 16,
-    "xtick.labelsize": 14,
-    "ytick.labelsize": 14,
-    "legend.fontsize": 14,
+    "font.size": 20,
+    "axes.labelsize": 20,
+    "axes.titlesize": 20,
+    "xtick.labelsize": 16,
+    "ytick.labelsize": 16,
+    "legend.fontsize": 16,
     "figure.dpi": 600,
 }
 
@@ -114,12 +114,12 @@ def plot_N_study(records, out_path="figures/N_study.pdf"):
     ax.plot(n_vals, q_means, color=COLOR_Q, lw=2,
             marker="o", markersize=5, label="Quantum mean")
 
-    ax.set_xlabel(r"Number of evaluation points $N$", fontsize=16)
-    ax.set_ylabel("Integral estimate", fontsize=16)
+    ax.set_xlabel(r"Number of evaluation points $N$", fontsize=20)
+    ax.set_ylabel("Integral estimate", fontsize=20)
     ax.set_xticks(n_vals)
     # Make y-axis to log scale to better visualize differences at small N
     ax.set_yscale("log")
-    ax.tick_params(direction="in", labelsize=14)
+    ax.tick_params(direction="in", labelsize=16)
     ax.legend(loc="upper right", fontsize=16)
     ax.margins(x=0.03)
     fig.tight_layout()

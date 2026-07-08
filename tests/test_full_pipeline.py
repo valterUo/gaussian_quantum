@@ -58,6 +58,7 @@ class TestQuantumHSGPPipeline:
         q_mean = quantum_hsgp_mean(
             X_train, y_train, X_test, M, L, noise_var,
             n_eigenvalue_qubits=TAU, shots=SHOTS, backend=backend,
+            analytical=False,
         )
         assert abs(q_mean - hsgp_mean[0]) < MEAN_TOL
 
@@ -70,6 +71,7 @@ class TestQuantumHSGPPipeline:
         q_var = quantum_hsgp_variance(
             X_train, X_test, M, L, noise_var,
             n_eigenvalue_qubits=TAU, shots=SHOTS, backend=backend,
+            analytical=False,
         )
         assert abs(q_var - hsgp_var[0]) < VAR_TOL
 
@@ -79,6 +81,7 @@ class TestQuantumHSGPPipeline:
         q_var = quantum_hsgp_variance(
             X_train, X_test, M, L, noise_var,
             n_eigenvalue_qubits=TAU, shots=SHOTS, backend=backend,
+            analytical=False,
         )
         assert q_var >= 0
 
@@ -91,6 +94,7 @@ class TestQuantumHSGPPipeline:
         q_mean = quantum_hsgp_mean(
             X_train, y_train, X_test, M, L, noise_var,
             n_eigenvalue_qubits=TAU, shots=SHOTS, backend=backend,
+            analytical=False,
         )
         # Both should be positive for sin(1.5) ≈ 0.997
         assert q_mean > 0
@@ -107,6 +111,7 @@ class TestQuantumHSGPPipeline:
         q_mean = quantum_hsgp_mean(
             X_train, y_train, x_test, M, L, noise_var,
             n_eigenvalue_qubits=TAU, shots=SHOTS, backend=backend,
+            analytical=False,
         )
         # sin(0) = 0, mean should be close to 0
         assert abs(q_mean) < 0.5

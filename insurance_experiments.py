@@ -10,9 +10,9 @@ claim severity distribution × insurance payoff function using four methods:
 
 Usage
 -----
-    python insurance_experiments.py                 # classical only (fast)
-    python insurance_experiments.py --quantum       # include quantum method
-    python insurance_experiments.py --plot           # save integrand plots
+    python insurance_experiments.py                 # all methods + plots (default)
+    python insurance_experiments.py --no-quantum    # skip the QPE-circuit method
+    python insurance_experiments.py --no-plot       # skip saving figures
 """
 
 import argparse
@@ -37,11 +37,11 @@ def main():
     parser = argparse.ArgumentParser(
         description="Insurance Bayesian quadrature experiments",
     )
-    parser.add_argument("--quantum", action="store_true", default=True,
+    parser.add_argument("--quantum", action=argparse.BooleanOptionalAction, default=True,
                         help="Include quantum HSGP-BQ method (QPE circuits)")
-    parser.add_argument("--quantum-analytical", action="store_true", default=True,
+    parser.add_argument("--quantum-analytical", action=argparse.BooleanOptionalAction, default=True,
                         help="Include analytical quantum HSGP-BQ method (exact eigendecomposition)")
-    parser.add_argument("--plot", action="store_true", default=True,
+    parser.add_argument("--plot", action=argparse.BooleanOptionalAction, default=True,
                         help="Save comparison plots to figures/")
     parser.add_argument("--N", type=int, default=32,
                         help="Number of evaluation points (default: 32)")
@@ -56,16 +56,16 @@ def main():
     parser.add_argument("--point-strategy", type=str, default="hybrid",
                         choices=["hybrid", "quantile", "uniform"],
                         help="Evaluation point placement (default: hybrid)")
-    parser.add_argument("--quantum-N", type=int, default=32,
-                        help="Quantum evaluation points (default: 32)")
-    parser.add_argument("--quantum-M", type=int, default=32,
-                        help="Quantum HSGP basis functions (default: 32)")
+    parser.add_argument("--quantum-N", type=int, default=None,
+                        help="Quantum evaluation points (default: same as --N)")
+    parser.add_argument("--quantum-M", type=int, default=None,
+                        help="Quantum HSGP basis functions (default: same as --M)")
     parser.add_argument("--n-eigenvalue-qubits", type=int, default=12,
                         help="QPE eigenvalue register qubits (default: 12)")
-    parser.add_argument("--quantum-noise-std", type=float, default=0.01,
-                        help="Quantum observation noise std (default: 0.01)")
-    parser.add_argument("--quantum-length-scale", type=float, default=1.0,
-                        help="Quantum kernel length scale (default: 1.0)")
+    parser.add_argument("--quantum-noise-std", type=float, default=None,
+                        help="Quantum observation noise std (default: same as --noise-std)")
+    parser.add_argument("--quantum-length-scale", type=float, default=None,
+                        help="Quantum kernel length scale (default: same as auto-computed length scale)")
     parser.add_argument("--load_from_file", type=str, default=None,
                         help="Path to JSON file with precomputed results (skip experiments and plotting)")
     args = parser.parse_args()
@@ -75,9 +75,13 @@ def main():
           f"shots={args.shots}, seed={args.seed}, "
           f"noise_std={args.noise_std}, points={args.point_strategy}")
     if args.quantum or args.quantum_analytical:
-        print(f"  quantum: N_q={args.quantum_N}, M_q={args.quantum_M}, "
-              f"noise_std_q={args.quantum_noise_std}, "
-              f"ls_q={args.quantum_length_scale}, "
+        q_N_str = str(args.quantum_N) if args.quantum_N is not None else f"={args.N}"
+        q_M_str = str(args.quantum_M) if args.quantum_M is not None else f"={args.M}"
+        q_ns_str = str(args.quantum_noise_std) if args.quantum_noise_std is not None else f"={args.noise_std}"
+        q_ls_str = str(args.quantum_length_scale) if args.quantum_length_scale is not None else "auto"
+        print(f"  quantum: N_q={q_N_str}, M_q={q_M_str}, "
+              f"noise_std_q={q_ns_str}, "
+              f"ls_q={q_ls_str}, "
               f"tau={args.n_eigenvalue_qubits}")
     print()
 

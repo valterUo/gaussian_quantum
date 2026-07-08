@@ -7,3 +7,4 @@ dist/
 build/
 myenv/
 Quantum_HSGP_quadrature_Pareto.ipynb
+*.pdf

@@ -13,12 +13,12 @@ def plot_integrand(integrand, domain, X_eval, y_eval):
         "font.family": "serif",
         "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
         "mathtext.fontset": "stix",
-        "font.size": 16,
-        "axes.labelsize": 16,
-        "axes.titlesize": 16,
-        "xtick.labelsize": 14,
-        "ytick.labelsize": 14,
-        "legend.fontsize": 14,
+        "font.size": 20,
+        "axes.labelsize": 20,
+        "axes.titlesize": 20,
+        "xtick.labelsize": 16,
+        "ytick.labelsize": 16,
+        "legend.fontsize": 16,
         "figure.dpi": 600,
     })
 
@@ -26,15 +26,39 @@ def plot_integrand(integrand, domain, X_eval, y_eval):
     g = integrand(z)
 
     fig, ax = plt.subplots(figsize=(10, 5))
-    ax.fill_between(z, g, alpha=0.15, color="steelblue")
+    ax.fill_between(z, g, 0.0, alpha=0.15, color="steelblue")
     ax.plot(z, g, "steelblue", lw=2, label=r"$\Pi(z)\,f_Z(z)$")
     ax.plot(X_eval.ravel(), y_eval, "rx", ms=7, label="Noisy observations")
-    #ax.set_yscale("log")
-    ax.set_xlabel("$z$", fontsize=16)
-    ax.set_ylabel("Integrand", fontsize=16)
-    #ax.set_title(title or "Integrand and training data")
-    ax.tick_params(direction='in', labelsize=14)
-    ax.legend(fontsize=14)
+
+    ax.set_xlabel("$z$", fontsize=20)
+    ax.set_ylabel("Integrand", fontsize=20)
+    ax.tick_params(direction="in", labelsize=16)
+    ax.legend(fontsize=20)
+
+    # Add small horizontal padding so the curve/points do not touch plot borders.
+    x_all = np.concatenate([np.asarray(z).ravel(), np.asarray(X_eval).ravel()])
+    x_min = np.nanmin(x_all)
+    x_max = np.nanmax(x_all)
+    x_span = x_max - x_min
+    x_pad = 0.04 * (x_span if x_span > 0 else (abs(x_max) if x_max != 0 else 1.0))
+    ax.set_xlim(x_min - x_pad, x_max + x_pad)
+
+    # Keep the baseline at y=0 when data is nonnegative so the shaded area
+    # touches the x-axis (no floating effect).
+    y_all = np.concatenate([np.asarray(g).ravel(), np.asarray(y_eval).ravel()])
+    y_min = np.nanmin(y_all)
+    y_max = np.nanmax(y_all)
+    y_span = y_max - y_min
+    y_pad = 0.08 * (y_span if y_span > 0 else (abs(y_max) if y_max != 0 else 1.0))
+
+    if y_min >= 0:
+        ax.set_ylim(0.0, y_max + y_pad)
+    else:
+        ax.set_ylim(y_min - y_pad, y_max + y_pad)
+
+    # Remove extra autoscale padding on y so baseline aligns exactly.
+    ax.margins(y=0)
+
     fig.tight_layout()
     return fig
 
@@ -63,12 +87,12 @@ def plot_comparison_gaussians(
         "font.family": "serif",
         "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
         "mathtext.fontset": "stix",
-        "font.size": 16,
-        "axes.labelsize": 16,
-        "axes.titlesize": 16,
-        "xtick.labelsize": 14,
-        "ytick.labelsize": 14,
-        "legend.fontsize": 14,
+        "font.size": 20,
+        "axes.labelsize": 20,
+        "axes.titlesize": 20,
+        "xtick.labelsize": 16,
+        "ytick.labelsize": 16,
+        "legend.fontsize": 16,
         "figure.dpi": 600,
     })
 
@@ -80,7 +104,7 @@ def plot_comparison_gaussians(
 
     def _label(name, mean, var):
         mse = (mean - exact) ** 2 + var
-        return f"{name} (MSE={mse:.4f})"
+        return f"{name}" #(MSE={mse:.4f})"
 
     methods = [
         (_label("GPQ", result["gpq_mean"], result["gpq_var"]),
@@ -88,13 +112,11 @@ def plot_comparison_gaussians(
         (_label("HSGP-BQ", result["hsgp_mean"], result["hsgp_var"]),
          result["hsgp_mean"], result["hsgp_var"], color_HSGP, "--"),
     ]
-    if run_quantum_analytical and "quantum_analytical_mean" in result and False:
-        methods.append(
-            (_label("Q-Analytical", result["quantum_analytical_mean"],
-                    result["quantum_analytical_var"]),
-             result["quantum_analytical_mean"],
-             result["quantum_analytical_var"], color_QA, "-."),
-        )
+    # The analytical-quantum result is the exact low-rank posterior, which is
+    # mathematically identical to the classical HSGP-BQ curve above.  It is
+    # intentionally not drawn here to avoid a second, exactly-overlapping line.
+    # To show it as a validation overlay, append a Q-Analytical entry (colour
+    # color_QA) to `methods` under `run_quantum_analytical`.
     if run_quantum and "quantum_mean" in result:
         methods.append(
             (_label("Quantum", result["quantum_mean"], result["quantum_var"]),
@@ -132,8 +154,8 @@ def plot_comparison_gaussians(
         vbottom = clip_min if use_log else 0.0
         ax.vlines(mu, vbottom, peak_plot, color=color, linewidth=1.0, linestyle="-", alpha=0.6)
 
-    ax.set_xlabel("Integral value", fontsize=16)
-    ax.set_ylabel("Probability density", fontsize=16)
+    ax.set_xlabel("Integral value", fontsize=20)
+    ax.set_ylabel("Probability density", fontsize=20)
 
     if use_log:
         ax.set_yscale("log")
@@ -145,8 +167,8 @@ def plot_comparison_gaussians(
     # Remove default autoscale padding so curves touch the x-axis baseline
     ax.margins(x=0, y=0)
 
-    ax.tick_params(direction="in", labelsize=14)
-    ax.legend(loc="upper right", fontsize=14)
+    ax.tick_params(direction="in", labelsize=16)
+    ax.legend(loc="upper left", fontsize=16)
     fig.tight_layout()
     return fig
 
@@ -333,9 +355,12 @@ def save_plots(
     import matplotlib.pyplot as plt
 
     os.makedirs(out_dir, exist_ok=True)
-    rng = np.random.default_rng(seed)
 
     for r in results:
+        # Fresh RNG per result so the plotted noise matches the noise each
+        # experiment actually trained on (run_experiment reseeds with the same
+        # seed for every (dist, payoff) pair rather than continuing one stream).
+        rng = np.random.default_rng(seed)
         integrand, domain, dist_obj = make_integrand_fn(
             r["dist_name"],
             experiment_dist_params.get(r["dist_name"]),

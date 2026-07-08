@@ -77,10 +77,10 @@ def run_experiment(
     shots=65536,
     seed=679,
     point_strategy="hybrid",
-    quantum_N=32,
-    quantum_M=6,
-    quantum_noise_std=0.001,
-    quantum_length_scale=1.0,
+    quantum_N=None,
+    quantum_M=None,
+    quantum_noise_std=None,
+    quantum_length_scale=None,
 ):
     """Run a single BQ experiment for one (distribution, payoff) pair.
 
@@ -129,6 +129,16 @@ def run_experiment(
         amplitude = float(np.std(np.squeeze(integrand(X_raw))))
         amplitude = max(amplitude, 1e-3)  # guard against near-zero integrands
 
+    # ── Resolve quantum-specific parameters (default to classical values) ──
+    if quantum_N is None:
+        quantum_N = N
+    if quantum_M is None:
+        quantum_M = M
+    if quantum_noise_std is None:
+        quantum_noise_std = noise_std
+    if quantum_length_scale is None:
+        quantum_length_scale = length_scale
+
     result = {
         "dist_name": dist_name,
         "payoff_name": payoff_name,
@@ -137,8 +147,16 @@ def run_experiment(
         "N": N,
         "M": M,
         "L": L,
+        "noise_std": noise_std,
         "length_scale": length_scale,
+        "amplitude": amplitude,
         "point_strategy": point_strategy,
+        "quantum_N": quantum_N,
+        "quantum_M": quantum_M,
+        "quantum_noise_std": quantum_noise_std,
+        "quantum_length_scale": quantum_length_scale,
+        "n_eigenvalue_qubits": n_eigenvalue_qubits,
+        "shots": shots,
     }
     timings = {}
 
@@ -170,16 +188,6 @@ def run_experiment(
     result["hsgp_var"] = hsgp_var
 
     # ── 4. Quantum HSGP-BQ  ────────────────────────────────────
-    #
-    # The quantum circuit method uses QPE circuits whose accuracy degrades
-    # when the Frobenius norm F² = trace(XᵀX) is too large or the noise
-    # variance too small.  We therefore give the circuit method its own
-    # QPE-compatible configuration.
-    #
-    # The *analytical* quantum method uses exact eigendecomposition, so it
-    # is algebraically identical to classical HSGP.  To demonstrate this,
-    # it shares the same data, domain, and hyperparameters as the HSGP
-    # method above.
     if run_quantum_analytical:
         from gaussian_quantum.quantum_algorithms import quantum_hsgp_integral
 
@@ -214,7 +222,7 @@ def run_experiment(
         t0 = time.perf_counter()
         q_mean, q_var = quantum_hsgp_integral(
             q_X_eval, q_y_eval, centered_domain, quantum_M, L, q_noise_var,
-            length_scale=length_scale, amplitude=amplitude,
+            length_scale=quantum_length_scale, amplitude=amplitude,
             n_eigenvalue_qubits=n_eigenvalue_qubits, shots=shots, seed=seed,
         )
         timings["quantum"] = time.perf_counter() - t0
