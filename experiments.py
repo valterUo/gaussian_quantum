@@ -83,6 +83,7 @@ def run_experiment(
     quantum_M=None,
     quantum_noise_std=None,
     quantum_length_scale=None,
+    rank_sweep=(1, 2, 3, 4),
 ):
     """Run a single BQ experiment for one (distribution, payoff) pair.
 
@@ -215,10 +216,13 @@ def run_experiment(
 
         q_X_eval = (q_X_raw - midpoint).reshape(-1, 1)
 
-        # Classical HSGP-BQ on the *quantum* data with the *quantum*
-        # hyperparameters: the exact target the quantum circuit converges to
-        # as τ, shots → ∞.  Plotting this alongside the quantum estimate
-        # isolates the QPE/shot error from hyperparameter differences.
+        # Classical baselines on the *quantum* data with the *quantum*
+        # hyperparameters (M_q, σ_q, ℓ_q): the exact targets the quantum
+        # circuit converges to as τ, shots → ∞.  Reporting these alongside
+        # the quantum estimate isolates the QPE/shot error from the
+        # hyperparameter differences, and — evaluated at the same σ_q as the
+        # quantum method — they overlap the quantum distribution the way the
+        # reference paper's Fig. 5 does (all methods share one σ there).
         t0 = time.perf_counter()
         hsgp_q_mean, hsgp_q_var = hsgp_integral(
             q_X_eval, q_y_eval, centered_domain, quantum_M, L,
@@ -228,6 +232,15 @@ def run_experiment(
         timings["hsgp_quantum_params"] = time.perf_counter() - t0
         result["hsgp_q_mean"] = hsgp_q_mean
         result["hsgp_q_var"] = hsgp_q_var
+
+        # Full-kernel GPQ at the same quantum hyperparameters, for the
+        # paper-style matched comparison figure.
+        gpq_q_mean, gpq_q_var = gpq_integral(
+            q_X_eval, q_y_eval, centered_domain, q_noise_var,
+            length_scale=quantum_length_scale, amplitude=amplitude,
+        )
+        result["gpq_q_mean"] = gpq_q_mean
+        result["gpq_q_var"] = gpq_q_var
 
     if run_quantum_analytical:
         t0 = time.perf_counter()
@@ -239,6 +252,22 @@ def run_experiment(
         timings["quantum_analytical"] = time.perf_counter() - t0
         result["quantum_analytical_mean"] = qa_mean
         result["quantum_analytical_var"] = qa_var
+
+        # Low-rank sweep (paper's QHSQ R=1,2,3,4 in Fig. 5): the analytical
+        # quantum quadrature keeping only the R dominant singular values.
+        ranks = [r for r in rank_sweep if r <= quantum_M]
+        rank_means, rank_vars = [], []
+        for r in ranks:
+            m_r, v_r = quantum_hsgp_integral(
+                q_X_eval, q_y_eval, centered_domain, quantum_M, L, q_noise_var,
+                length_scale=quantum_length_scale, amplitude=amplitude,
+                analytical=True, rank=r,
+            )
+            rank_means.append(m_r)
+            rank_vars.append(v_r)
+        result["rank_values"] = ranks
+        result["quantum_rank_means"] = rank_means
+        result["quantum_rank_vars"] = rank_vars
 
     if run_quantum:
         t0 = time.perf_counter()

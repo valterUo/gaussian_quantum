@@ -63,6 +63,66 @@ def plot_integrand(integrand, domain, X_eval, y_eval):
     return fig
 
 
+_PLT_RC = {
+    "font.family": "serif",
+    "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
+    "mathtext.fontset": "stix",
+    "font.size": 20,
+    "axes.labelsize": 20,
+    "axes.titlesize": 20,
+    "xtick.labelsize": 16,
+    "ytick.labelsize": 16,
+    "legend.fontsize": 16,
+    "figure.dpi": 600,
+}
+
+COLOR_GPQ = "k"
+COLOR_HSGP = "#8f0606"
+COLOR_HSGP_Q = "#e07b00"
+COLOR_Q = "#008080"
+
+
+def _draw_gaussians(ax, exact, methods, normalize=False, use_log=False,
+                    clip_min=1e-300):
+    """Draw N(mean, var) PDFs for a list of (label, mean, var, color, ls, alpha).
+
+    Returns nothing; mutates *ax*.  The x-range spans all means ± 4σ.
+    """
+    from scipy.stats import norm
+
+    all_means = [m[1] for m in methods]
+    all_stds = [np.sqrt(max(m[2], 1e-12)) for m in methods]
+    lo = min(exact, min(m - 4 * s for m, s in zip(all_means, all_stds)))
+    hi = max(exact, max(m + 4 * s for m, s in zip(all_means, all_stds)))
+    x = np.linspace(lo, hi, 600)
+
+    ax.axvline(x=exact, color="k", linestyle="-", linewidth=1.5, label="Exact")
+    for label, mu, var, color, ls, alpha in methods:
+        std = np.sqrt(max(var, 1e-12))
+        pdf = norm.pdf(x, mu, std)
+        peak = norm.pdf(mu, mu, std)
+        if normalize:
+            pdf = pdf / peak
+            peak = 1.0
+        if use_log:
+            pdf = np.clip(pdf, clip_min, None)
+        ax.fill_between(x, pdf, alpha=0.12 * alpha, color=color)
+        ax.plot(x, pdf, color=color, ls=ls, lw=2, alpha=alpha, label=label)
+        ax.vlines(mu, clip_min if use_log else 0.0, peak,
+                  color=color, linewidth=1.0, alpha=0.6 * alpha)
+
+    ax.set_xlabel("Integral value", fontsize=20)
+    ax.set_ylabel("Probability density", fontsize=20)
+    if use_log:
+        ax.set_yscale("log")
+        ax.set_ylim(bottom=clip_min)
+    else:
+        ax.set_ylim(bottom=0.0)
+    ax.margins(x=0, y=0)
+    ax.tick_params(direction="in", labelsize=16)
+    ax.legend(loc="upper left", fontsize=16)
+
+
 def plot_comparison_gaussians(
     result,
     run_quantum=False,
@@ -73,102 +133,96 @@ def plot_comparison_gaussians(
 ):
     """Overlay Gaussian PDFs N(mean, var) for each BQ method.
 
+    Draws the full-resolution classical baselines (GPQ, HSGP-BQ at σ), the
+    matched classical target (HSGP-BQ at the quantum σ_q, M_q — the curve the
+    quantum method converges to), and the quantum estimate.  Because the
+    classical baselines use the (smaller) experiment σ while the quantum uses
+    σ_q, the classical curves are sharp and the quantum is broad; the matched
+    curve shows the quantum lands on its correct classical target despite that
+    width difference.  For the paper-style figure where every method shares
+    one σ and the distributions overlap, see :func:`plot_comparison_matched`.
+
     Args:
-        normalize: if True, scale each PDF by its peak (so peaks=1) to
-            compare shapes regardless of absolute height.
+        normalize: if True, scale each PDF by its peak (so peaks=1).
         use_log: if True, use a log y-axis (clip values below `clip_min`).
         clip_min: minimum y-value to use when plotting on a log scale.
     """
     import matplotlib.pyplot as plt
-    from scipy.stats import norm
 
-    # IEEE font settings - Times New Roman
-    plt.rcParams.update({
-        "font.family": "serif",
-        "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
-        "mathtext.fontset": "stix",
-        "font.size": 20,
-        "axes.labelsize": 20,
-        "axes.titlesize": 20,
-        "xtick.labelsize": 16,
-        "ytick.labelsize": 16,
-        "legend.fontsize": 16,
-        "figure.dpi": 600,
-    })
-
+    plt.rcParams.update(_PLT_RC)
     exact = result["exact"]
-    color_GPQ = "k"
-    color_HSGP = "#8f0606"
-    color_Q = "#008080"
-    color_QA = "#e07b00"
-
-    def _label(name, mean, var):
-        mse = (mean - exact) ** 2 + var
-        return f"{name}" #(MSE={mse:.4f})"
 
     methods = [
-        (_label("GPQ", result["gpq_mean"], result["gpq_var"]),
-         result["gpq_mean"], result["gpq_var"], color_GPQ, ":"),
-        (_label("HSGP-BQ", result["hsgp_mean"], result["hsgp_var"]),
-         result["hsgp_mean"], result["hsgp_var"], color_HSGP, "--"),
+        ("GPQ", result["gpq_mean"], result["gpq_var"], COLOR_GPQ, ":", 1.0),
+        ("HSGP-BQ", result["hsgp_mean"], result["hsgp_var"], COLOR_HSGP, "--", 1.0),
     ]
-    # The analytical-quantum result is the exact low-rank posterior, which is
-    # mathematically identical to the classical HSGP-BQ curve above.  It is
-    # intentionally not drawn here to avoid a second, exactly-overlapping line.
-    # To show it as a validation overlay, append a Q-Analytical entry (colour
-    # color_QA) to `methods` under `run_quantum_analytical`.
+    if (run_quantum or run_quantum_analytical) and "hsgp_q_mean" in result:
+        methods.append(
+            ("HSGP-BQ (matched)", result["hsgp_q_mean"], result["hsgp_q_var"],
+             COLOR_HSGP_Q, "-.", 1.0),
+        )
     if run_quantum and "quantum_mean" in result:
         methods.append(
-            (_label("Quantum", result["quantum_mean"], result["quantum_var"]),
-             result["quantum_mean"], result["quantum_var"], color_Q, "-"),
+            ("Quantum", result["quantum_mean"], result["quantum_var"],
+             COLOR_Q, "-", 1.0),
         )
 
-    # Determine plotting range
-    all_means = [m[1] for m in methods]
-    all_stds = [np.sqrt(max(m[2], 1e-12)) for m in methods]
-    lo = min(m - 4 * s for m, s in zip(all_means, all_stds))
-    hi = max(m + 4 * s for m, s in zip(all_means, all_stds))
-    x = np.linspace(lo, hi, 500)
+    fig, ax = plt.subplots(figsize=(10, 5))
+    _draw_gaussians(ax, exact, methods, normalize, use_log, clip_min)
+    fig.tight_layout()
+    return fig
+
+
+def plot_comparison_matched(result, use_circuit=True):
+    """Paper-style comparison: every method at the *same* hyperparameters.
+
+    Reproduces the reference paper's Fig. 5 layout.  GPQ, HSGP-BQ, and the
+    quantum quadrature are all evaluated at the quantum configuration
+    (M_q, σ_q, ℓ_q) — a single shared σ — so their posterior variances are
+    comparable and the Gaussian estimates overlap around the integral value,
+    rather than the sharp-classical / broad-quantum split that appears when
+    the classical baselines use a much smaller σ.  The quantum low-rank
+    sweep (R = 1, 2, …) is drawn with increasing opacity, showing the higher
+    ranks converging onto the classical HSGP-BQ curve.
+
+    Args:
+        result: One result dict from :func:`experiments.run_experiment`
+            (must have been run with run_quantum_analytical=True so the
+            matched baselines and rank sweep are present).
+        use_circuit: also overlay the shot-based circuit quantum estimate.
+
+    Returns:
+        Matplotlib figure, or None if the matched fields are absent.
+    """
+    import matplotlib.pyplot as plt
+
+    if "hsgp_q_mean" not in result:
+        return None
+    plt.rcParams.update(_PLT_RC)
+    exact = result["exact"]
+
+    methods = [
+        ("GPQ", result["gpq_q_mean"], result["gpq_q_var"], COLOR_GPQ, ":", 1.0),
+        ("HSGP-BQ", result["hsgp_q_mean"], result["hsgp_q_var"],
+         COLOR_HSGP, "--", 1.0),
+    ]
+    ranks = result.get("rank_values", [])
+    rank_means = result.get("quantum_rank_means", [])
+    rank_vars = result.get("quantum_rank_vars", [])
+    r_max = max(ranks) if ranks else 1
+    for R, m, v in zip(ranks, rank_means, rank_vars):
+        alpha = (R / r_max) ** 1.6
+        methods.append(
+            (f"Quantum R={R}", m, v, COLOR_Q, "-", alpha),
+        )
+    if use_circuit and "quantum_mean" in result:
+        methods.append(
+            ("Quantum (circuit)", result["quantum_mean"], result["quantum_var"],
+             COLOR_HSGP_Q, "-", 1.0),
+        )
 
     fig, ax = plt.subplots(figsize=(10, 5))
-    ax.axvline(x=exact, color="k", linestyle="-", linewidth=1.5, label="Exact")
-
-    for label, mu, var, color, ls in methods:
-        std = np.sqrt(max(var, 1e-12))
-        pdf = norm.pdf(x, mu, std)
-        peak = norm.pdf(mu, mu, std)
-        if normalize:
-            pdf = pdf / peak
-            peak_plot = 1.0
-            label_plot = f"{label} (norm)"
-        else:
-            peak_plot = peak
-            label_plot = label
-
-
-        if use_log:
-            pdf = np.clip(pdf, clip_min, None)
-
-        ax.fill_between(x, pdf, alpha=0.15, color=color)
-        ax.plot(x, pdf, color=color, ls=ls, lw=2, label=label_plot)
-        vbottom = clip_min if use_log else 0.0
-        ax.vlines(mu, vbottom, peak_plot, color=color, linewidth=1.0, linestyle="-", alpha=0.6)
-
-    ax.set_xlabel("Integral value", fontsize=20)
-    ax.set_ylabel("Probability density", fontsize=20)
-
-    if use_log:
-        ax.set_yscale("log")
-        ax.set_ylim(bottom=clip_min)
-    else:
-        ax.set_yscale("linear")
-        ax.set_ylim(bottom=0.0)
-
-    # Remove default autoscale padding so curves touch the x-axis baseline
-    ax.margins(x=0, y=0)
-
-    ax.tick_params(direction="in", labelsize=16)
-    ax.legend(loc="upper left", fontsize=16)
+    _draw_gaussians(ax, exact, methods)
     fig.tight_layout()
     return fig
 
@@ -181,14 +235,31 @@ def _mse(r, method):
     return (r[f"{method}_mean"] - r["exact"]) ** 2 + r[f"{method}_var"]
 
 
-def print_summary_table(results, run_quantum=False, run_quantum_analytical=False):
-    """Print a tabular summary of results using MSE = bias² + variance.
+def _abs_err(r, method):
+    """Point-estimate error |mean − exact| for a result dict and method."""
+    return abs(r[f"{method}_mean"] - r["exact"])
 
-    The Tail% column reports the domain-truncation remainder
-    ∫_b^∞ Π(z)f(z)dz as a percentage of the untruncated expectation, so the
-    truncation error can be compared against the method errors.
+
+def print_summary_table(results, run_quantum=False, run_quantum_analytical=False):
+    """Print a tabular summary of results.
+
+    Columns
+    -------
+    Tail%      Domain-truncation remainder ∫_b^∞ Π f dz as a percentage of the
+               untruncated expectation (truncation error vs. method error).
+    *_MSE      Bayesian risk bias² + posterior variance.  Note the posterior
+               variance scales with σ², so methods run at a larger σ have a
+               larger MSE even with an identical point estimate.
+    HSGPq_MSE  Classical HSGP-BQ at the *quantum* hyperparameters (M_q, σ_q):
+               the matched target the quantum method converges to.  QA_MSE
+               sits on this to machine precision — the gap to HSGP_MSE is the
+               M/σ config difference, not a quantum effect.
+    Q|err|     Point-estimate error |Q_mean − exact| of the quantum circuit,
+               which reflects estimate accuracy without the σ²-inflated
+               variance term.
     """
     has_tail = bool(results) and "exact_tail" in results[0]
+    has_matched = bool(results) and "hsgp_q_mean" in results[0]
     header = (
         f"{'Distribution':>12s}  {'Payoff':>25s}  "
         f"{'Exact':>10s}"
@@ -196,10 +267,12 @@ def print_summary_table(results, run_quantum=False, run_quantum_analytical=False
     if has_tail:
         header += f"  {'Tail%':>6s}"
     header += f"  {'GPQ_MSE':>10s}  {'HSGP_MSE':>10s}"
+    if has_matched and (run_quantum or run_quantum_analytical):
+        header += f"  {'HSGPq_MSE':>10s}"
     if run_quantum_analytical:
         header += f"  {'QA_MSE':>10s}"
     if run_quantum:
-        header += f"  {'Q_MSE':>10s}"
+        header += f"  {'Q_MSE':>10s}  {'Q|err|':>8s}"
 
     print("\n" + "=" * len(header))
     print(header)
@@ -215,14 +288,19 @@ def print_summary_table(results, run_quantum=False, run_quantum_analytical=False
             full = r["exact"] + tail
             line += f"  {tail / full * 100 if full else 0.0:6.3f}"
         line += f"  {_mse(r, 'gpq'):10.6f}  {_mse(r, 'hsgp'):10.6f}"
+        if has_matched and (run_quantum or run_quantum_analytical):
+            if "hsgp_q_mean" in r:
+                line += f"  {_mse(r, 'hsgp_q'):10.6f}"
+            else:
+                line += f"  {'N/A':>10s}"
         if run_quantum_analytical and "quantum_analytical_mean" in r:
             line += f"  {_mse(r, 'quantum_analytical'):10.6f}"
         elif run_quantum_analytical:
             line += f"  {'N/A':>10s}"
         if run_quantum and "quantum_mean" in r:
-            line += f"  {_mse(r, 'quantum'):10.6f}"
+            line += f"  {_mse(r, 'quantum'):10.6f}  {_abs_err(r, 'quantum'):8.4f}"
         elif run_quantum:
-            line += f"  {'N/A':>10s}"
+            line += f"  {'N/A':>10s}  {'N/A':>8s}"
         print(line)
 
     print("=" * len(header))
@@ -403,6 +481,16 @@ def save_plots(
             run_quantum_analytical=run_quantum_analytical,
         )
         fig2.savefig(os.path.join(out_dir, f"comparison_{tag}.pdf"), bbox_inches="tight")
+
+        # Paper-style matched comparison (all methods at the quantum config),
+        # only when the matched baselines / rank sweep are present.
+        if run_quantum_analytical and "hsgp_q_mean" in r:
+            fig3 = plot_comparison_matched(r, use_circuit=run_quantum)
+            if fig3 is not None:
+                fig3.savefig(
+                    os.path.join(out_dir, f"matched_{tag}.pdf"),
+                    bbox_inches="tight",
+                )
 
         plt.close("all")
 
