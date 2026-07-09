@@ -1,8 +1,18 @@
 # gaussian_quantum
 
-Qiskit implementation of the full three-stage quantum-assisted GP regression
-algorithm from [arXiv:2402.00544](https://arxiv.org/abs/2402.00544) —
-*Quantum-Assisted Hilbert-Space Gaussian Process Regression*.
+Qiskit implementation of quantum-assisted Hilbert-space Gaussian process
+regression and Bayesian quadrature, following
+
+- Farooq, Galvis-Florez & Särkkä, *Quantum-assisted Hilbert-space Gaussian
+  process regression*, [PRA 109, 052410 (2024)](https://doi.org/10.1103/PhysRevA.109.052410)
+  ([arXiv:2402.00544](https://arxiv.org/abs/2402.00544)),
+- Galvis-Florez, Farooq & Särkkä, *Provable Quantum Algorithm Advantage for
+  Gaussian Process Quadrature*,
+  [arXiv:2502.14467](https://arxiv.org/abs/2502.14467),
+
+applied to insurance payoff expectations `E[Π(Z)] = ∫ Π(z) f_Z(z) dz` over
+claim-severity distributions (Pareto, lognormal, gamma, Weibull, Poisson) and
+contract payoffs (deductibles, policy limits, stop-loss).
 
 ## Algorithm overview
 
@@ -12,8 +22,8 @@ subroutines for matrix inversion and inner-product estimation:
 | Stage | Component | Module |
 |-------|-----------|--------|
 | **1** | Hilbert-space kernel approximation (Solin & Särkkä) | `hilbert_space_approx.py` |
-| **2** | Quantum PCA — QPE + conditional rotations | `qpca.py` |
-| **3** | Hadamard / Swap tests for inner products | `quantum_algorithms.py` |
+| **2** | Data encoding + qPCA — QPE + conditional rotations | `qpca.py` |
+| **3** | Hadamard / Swap tests for the quadrature mean/variance | `quantum_algorithms.py` |
 
 ### Stage 1 — Hilbert-space kernel approximation
 
@@ -25,33 +35,43 @@ k(x, x') ≈ Σ_j S(√λ_j) φ_j(x) φ_j(x')
 ```
 
 This yields a feature matrix `X = Φ √Λ` of shape `(N, M)` where `M ≪ N`,
-so the GP posterior reduces to the `M × M` system:
+so the BQ/GP posterior reduces to the `M × M` system:
 
 ```
-E[f*] = X*ᵀ (XᵀX + σ²I)⁻¹ Xᵀy
-V[f*] = σ² X*ᵀ (XᵀX + σ²I)⁻¹ X*
+Q_BQ = z_μᵀ (XᵀX + σ²I)⁻¹ Xᵀy         (mean;  z_μ = √Λ Φ_μ kernel mean embedding)
+V_BQ = σ² z_μᵀ (XᵀX + σ²I)⁻¹ z_μ       (variance)
 ```
 
-### Stage 2 — Quantum PCA (qPCA)
+### Stage 2 — Data encoding + quantum PCA (papers' Figs. 3–4)
 
-The quantum speedup comes from encoding the spectral decomposition of
-`ρ = XᵀX / ‖X‖²_F` into a quantum register via:
-
-1. **Density-matrix unitary** `U = exp(2πi ρ)`
-2. **Quantum Phase Estimation (QPE)** extracts eigenvalues `σ_r²/‖X‖²_F`
-   into a τ-qubit register
-3. **Conditional rotations** encode `1/(σ_r² + σ²)` (mean) into an ancilla
-   amplitude, keyed on the eigenvalue register
-4. **Inverse QPE** uncomputes the eigenvalue register
+1. **Amplitude encoding** of the data matrix,
+   `|ψ_X⟩ = Σ_{n,m} x_nm |m⟩|n⟩ / ‖X‖_F`, over `log₂N + log₂M` qubits.
+2. **Density-matrix unitary** `U = exp(2πi XᵀX/δ)` acting on the `|m⟩`
+   register, with the phase scaling `δ` slightly above the largest
+   eigenvalue of `XᵀX` (Cleve et al.), snapped so the dominant eigenphase
+   sits exactly on a QPE bin.
+3. **QPE** writes the eigenphases `s_r²/δ` into a τ-qubit register.
+4. **Conditional rotations** keyed on the eigenvalue register encode
+   `c₁/(s_r²+σ²)` (mean) or `c₂/(s_r√(s_r²+σ²))` (variance) into an ancilla.
+   Rotations are restricted to windows around the resolvable eigenphases —
+   the papers' rank-R information extraction.
+5. **Inverse QPE** uncomputes the eigenvalue register (mean circuit only).
 
 ### Stage 3 — Hadamard & Swap tests
 
-The qPCA-prepared states are fed to quantum inner-product estimation:
+| Primitive | Statistics | Reconstruction |
+|-----------|------------|----------------|
+| **Hadamard test** vs `\|X̂_μ⟩\|ŷ⟩\|0⟩\|1⟩` | p₀ | `Q = ‖X‖_F ‖X_μ‖ ‖y‖ (2p₀−1)/c₁` |
+| **Swap test** vs `\|X̂_μ⟩` (both ancillas) | p(a=1), p₁₁ | `V = σ²‖X_μ‖² (‖X‖_F²/c₂²)(p(a=1) − 2p₁₁)` |
 
-| Primitive | Computes | Used for |
-|-----------|----------|----------|
-| **Hadamard test** | Re⟨ψ₁&#x7C;ψ₂⟩ | Posterior mean μ* |
-| **Swap test** | &#x7C;⟨ψ'₁&#x7C;ψ'₂⟩&#x7C;² | Posterior variance σ²* |
+**Simulation note.** The Stage-2 preparation circuits are built and executed
+gate-by-gate on the Aer statevector simulator; the Stage-3 measurement
+outcomes are then sampled from the exact outcome distribution of the test
+circuit (binomial/multinomial in the shot count), which is statistically
+identical to running the test circuit on a noiseless simulator.  The
+eigendecomposition used to *construct* `U` in simulation is classical — the
+simulation validates the circuits and their measurement statistics, not the
+asymptotic speedup, which is established analytically in the papers.
 
 The low-level Hadamard and Swap tests also support direct inner-product
 estimation on arbitrary amplitude-encoded vectors (legacy API).

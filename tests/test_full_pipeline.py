@@ -19,11 +19,13 @@ from gaussian_quantum.quantum_algorithms import (
 
 # ── tolerances ────────────────────────────────────────────────────────────────
 # With finite QPE (tau=5) the eigenvalue error is O(1/2^tau) ≈ 0.03.
-# Combined with shot noise at 32K shots, we allow ±0.25 absolute tolerance
-# on the reconstructed mean and ±0.01 on the variance (which is smaller).
+# Combined with shot noise at 2^20 shots (the ~1e6 used by the papers;
+# measurement outcomes are sampled from the exact circuit distribution, so
+# shots are cheap), we allow ±0.25 absolute tolerance on the reconstructed
+# mean and ±0.01 on the variance (which is smaller).
 MEAN_TOL = 0.25
 VAR_TOL = 0.01
-SHOTS = 32_768
+SHOTS = 1_048_576
 TAU = 5  # QPE precision bits
 
 

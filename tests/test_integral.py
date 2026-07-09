@@ -20,10 +20,12 @@ from gaussian_quantum.quantum_algorithms import quantum_hsgp_integral
 
 # ── tolerances ────────────────────────────────────────────────────────────────
 # The quantum BQ only runs 2 quantum circuits (Hadamard + Swap test)
-# instead of per-grid-point, so tolerances can be tighter.
+# instead of per-grid-point, so tolerances can be tighter.  Shots follow the
+# ~1e6 of the papers; outcomes are sampled from the exact circuit
+# distribution, so large shot counts cost nothing.
 INTEGRAL_MEAN_TOL = 0.5
 INTEGRAL_VAR_TOL = 0.05
-SHOTS = 32_768
+SHOTS = 1_048_576
 TAU = 5  # QPE precision bits
 
 

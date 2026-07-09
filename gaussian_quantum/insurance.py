@@ -48,16 +48,28 @@ DISTRIBUTIONS = {
 }
 
 
-def get_distribution(name, params=None):
+# Upper truncation quantile of the integration domain.  The BQ target is the
+# *truncated* integral; the discarded tail ∫_b^∞ Π f dz is computed by
+# tail_mass() and reported alongside the results (0.6–3.3 % of the full
+# expectation for the default distributions).  Raising the quantile shrinks
+# the tail but widens the domain, which degrades the HSGP basis resolution
+# and the length-scale heuristics far more than the tail gains — 0.999 is
+# the better trade-off; see figures/stats tables for the reported tails.
+TRUNCATION_QUANTILE = 0.999
+
+
+def get_distribution(name, params=None, q=TRUNCATION_QUANTILE):
     """Return a frozen scipy distribution and a finite integration domain.
 
-    For continuous distributions the domain is [support_lower, q_{0.999}].
-    For Poisson (discrete), a piecewise-constant continuous PDF is returned
-    alongside an integer-valued domain suitable for midpoint quadrature.
+    For continuous distributions the domain is [support_lower, q-quantile].
+    For Poisson (discrete), the domain is (-1/2, K + 1/2) with K = ppf(q),
+    i.e. unit bins centred on the integer support points, matching the
+    midpoint relaxation in :func:`distribution_pdf` / :func:`make_integrand`.
 
     Args:
         name: One of 'pareto', 'lognormal', 'gamma', 'weibull', 'poisson'.
         params: Dict of distribution parameters.  Uses defaults if *None*.
+        q: Truncation quantile for the upper integration limit.
 
     Returns:
         dist: Frozen scipy distribution (continuous or discrete).
@@ -73,13 +85,15 @@ def get_distribution(name, params=None):
     dist = spec["scipy"](params)
 
     if name == "poisson":
-        a = 0.0
-        b = float(dist.ppf(0.999))
-        if b < 1.0:
-            b = 20.0
+        K = float(dist.ppf(q))
+        if K < 1.0:
+            K = 20.0
+        # Bins [k - 1/2, k + 1/2) centred on the integers 0 … K, so that the
+        # midpoint relaxation integrates to Σ_k Π(k) pmf(k) exactly.
+        a, b = -0.5, K + 0.5
     else:
         a = float(dist.support()[0])
-        b = float(dist.ppf(0.999))
+        b = float(dist.ppf(q))
         # Ensure a finite upper bound
         if not np.isfinite(b) or b > 1e6:
             b = float(dist.ppf(0.99))
@@ -88,11 +102,17 @@ def get_distribution(name, params=None):
     return dist, (a, b)
 
 
+def _nearest_integer(z):
+    """Round to the nearest integer with half-up ties (bin midpoints)."""
+    return np.floor(np.asarray(z, dtype=float) + 0.5)
+
+
 def distribution_pdf(dist, name):
     """Return a callable PDF for *dist*.
 
-    For discrete Poisson, returns a piecewise-constant function that
-    interpolates the PMF so that ∫ f(z) dz ≈ 1 over the domain.
+    For discrete Poisson, returns the piecewise-constant relaxation
+    f(z) = pmf(k) for z in the unit bin [k - 1/2, k + 1/2) centred on the
+    integer k, so that ∫ f(z) dz = Σ_k pmf(k) over the centred domain.
 
     Args:
         dist: Frozen scipy distribution.
@@ -103,8 +123,8 @@ def distribution_pdf(dist, name):
     """
     if name == "poisson":
         def _poisson_pdf(z):
-            z = np.asarray(z, dtype=float)
-            return dist.pmf(np.floor(z).astype(int)).astype(float)
+            k = np.maximum(_nearest_integer(z), 0.0)
+            return dist.pmf(k.astype(int)).astype(float)
         return _poisson_pdf
     else:
         return dist.pdf
@@ -163,43 +183,114 @@ PAYOFF_DEFAULTS = {
 # ---------------------------------------------------------------------------
 
 def make_integrand(dist_name, dist_params=None,
-                   payoff_name="ordinary_deductible", payoff_params=None):
+                   payoff_name="ordinary_deductible", payoff_params=None,
+                   q=TRUNCATION_QUANTILE):
     """Build the integrand g(z) = Π(z) · f_Z(z) and its integration domain.
+
+    For continuous distributions g(z) = Π(z) f(z).  For the discrete Poisson
+    distribution both factors are evaluated at the midpoint k of the unit bin
+    [k - 1/2, k + 1/2) containing z:
+
+        g(z) = Π(k) pmf(k),   k = round(z),
+
+    so that ∫_{-1/2}^{K+1/2} g(z) dz = Σ_{k=0}^{K} Π(k) pmf(k) *exactly* —
+    the continuous relaxation and the discrete expectation coincide up to
+    tail truncation, for arbitrary payoff functions.
 
     Args:
         dist_name: Distribution name (e.g. 'pareto').
         dist_params: Dict of distribution parameters (or None for defaults).
         payoff_name: Payoff function name (e.g. 'ordinary_deductible').
         payoff_params: Dict of payoff parameters (or None for defaults).
+        q: Truncation quantile for the upper integration limit.
 
     Returns:
         integrand: Callable g(z) → ndarray.
         domain: (a, b) finite integration limits.
         dist: Frozen scipy distribution.
     """
-    dist, domain = get_distribution(dist_name, dist_params)
-    pdf = distribution_pdf(dist, dist_name)
-
+    dist, domain = get_distribution(dist_name, dist_params, q=q)
     payoff_fn = PAYOFFS[payoff_name]
     payoff_params = payoff_params or PAYOFF_DEFAULTS[payoff_name]
 
-    def integrand(z):
-        return payoff_fn(z, **payoff_params) * pdf(z)
+    if dist_name == "poisson":
+        def integrand(z):
+            k = np.maximum(_nearest_integer(z), 0.0)
+            return payoff_fn(k, **payoff_params) * dist.pmf(k.astype(int))
+    else:
+        pdf = distribution_pdf(dist, dist_name)
+
+        def integrand(z):
+            return payoff_fn(z, **payoff_params) * pdf(z)
 
     return integrand, domain, dist
 
 
-def exact_integral(integrand, domain):
+def quad_breakpoints(dist_name, domain, payoff_params=None):
+    """Breakpoints where the integrand is non-smooth, for adaptive quadrature.
+
+    Returns the payoff kink locations (deductible D, limit U) inside the
+    domain and, for Poisson, the half-integer bin edges of the
+    piecewise-constant relaxation.
+
+    Args:
+        dist_name: Distribution name string.
+        domain: (a, b) integration limits.
+        payoff_params: Payoff parameter dict (values are kink locations).
+
+    Returns:
+        Sorted list of interior breakpoints, or None if there are none.
+    """
+    a, b = float(domain[0]), float(domain[1])
+    pts = []
+    if dist_name == "poisson":
+        pts.extend(np.arange(np.floor(a) + 0.5, b, 1.0))
+    if payoff_params:
+        pts.extend(float(v) for v in payoff_params.values())
+    pts = sorted({p for p in pts if a < p < b})
+    return pts or None
+
+
+def exact_integral(integrand, domain, points=None):
     """Compute ∫_a^b g(z) dz via adaptive quadrature.
 
     Args:
         integrand: Callable g(z).
         domain: (a, b) integration limits.
+        points: Optional interior breakpoints (kinks/discontinuities) to
+            pass to the adaptive quadrature, see :func:`quad_breakpoints`.
 
     Returns:
         result: Scalar integral value.
         error: Estimated absolute error.
     """
     result, error = integrate.quad(integrand, domain[0], domain[1],
-                                   limit=200)
+                                   limit=200, points=points)
     return float(result), float(error)
+
+
+def tail_mass(integrand, domain, dist_name=None, max_terms=400):
+    """Integral of *integrand* beyond the truncated domain, ∫_b^∞ g(z) dz.
+
+    Quantifies how much of the untruncated expectation E[Π(Z)] the finite
+    domain discards, so the truncation error can be reported alongside the
+    method errors.  For Poisson the integrand is piecewise constant on unit
+    bins, so the remainder is the discrete sum Σ_{k>K} Π(k) pmf(k).
+
+    Args:
+        integrand: Callable g(z) from :func:`make_integrand`.
+        domain: (a, b) truncated integration limits.
+        dist_name: Distribution name; 'poisson' switches to the discrete sum.
+        max_terms: Number of tail terms to sum in the Poisson case.
+
+    Returns:
+        Scalar tail remainder (non-negative for non-negative payoffs).
+    """
+    b = float(domain[1])
+    if dist_name == "poisson":
+        # Domain ends at b = K + 1/2, so the first fully-excluded bin is K+1.
+        k_start = np.floor(b) + 1.0
+        ks = k_start + np.arange(max_terms)
+        return float(np.sum(integrand(ks)))
+    remainder, _ = integrate.quad(integrand, b, np.inf, limit=400)
+    return float(remainder)

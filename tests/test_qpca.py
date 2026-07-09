@@ -1,24 +1,33 @@
 """Tests for the quantum PCA module (Stage 2).
 
 Validates density-matrix unitary construction, QPE circuit, conditional
-rotations, and the full qPCA state-preparation pipeline.
+rotations, data-matrix encoding, and the paper-faithful state-preparation
+circuits together with their analytical (SVD) references.
 """
 
 import numpy as np
 import pytest
 from qiskit_aer import AerSimulator
 
-from gaussian_quantum.hilbert_space_approx import hilbert_space_features
+from gaussian_quantum.hilbert_space_approx import (
+    hilbert_space_features,
+    hs_gp_posterior,
+)
 from gaussian_quantum.qpca import (
     build_density_matrix_unitary,
     conditional_rotation_mean,
-    extract_postselected_state,
+    conditional_rotation_variance,
+    eigenphase_window_bins,
+    encode_data_matrix,
     inverse_qft_circuit,
-    prepare_mean_states,
-    prepare_qpca_state,
-    prepare_variance_states,
+    mean_overlap,
+    prepare_mean_state_circuit,
+    prepare_variance_state_circuit,
+    qbq_mean_analytical,
+    qbq_variance_analytical,
     qpe_circuit,
-    run_qpca_statevector,
+    spectral_scale,
+    variance_probabilities,
 )
 
 
@@ -171,52 +180,150 @@ class TestConditionalRotation:
         np.testing.assert_allclose(c, expected_c, rtol=1e-10)
 
 
-# ── full qPCA state preparation ─────────────────────────────────────────────
+# ── phase scaling and rotation windows ──────────────────────────────────────
 
-class TestQPCAStatePreparation:
-    def test_psi1_unit_norm(self, hsgp_setup, sv_backend):
-        """Post-selected mean state |ψ₁⟩ is unit-normalised."""
-        X_feat, y_train, x_star, noise_var = hsgp_setup
-        psi1, _, _, _, _, _ = prepare_mean_states(
-            X_feat, y_train, x_star, noise_var,
-            n_eigenvalue_qubits=3, backend=sv_backend,
+class TestSpectralScale:
+    def test_above_lambda_max(self):
+        """δ exceeds the largest eigenvalue so all phases are < 1."""
+        eigs = np.array([0.1, 0.5, 2.0])
+        delta = spectral_scale(eigs)
+        assert delta > 2.0
+        assert np.all(eigs / delta < 1.0)
+
+    def test_degenerate_spectrum(self):
+        """All-zero spectrum falls back to a positive scale."""
+        assert spectral_scale(np.zeros(4)) > 0
+
+
+class TestEigenphaseWindows:
+    def test_windows_cover_eigenphases(self):
+        """Each eigenphase's central bin is in the active set."""
+        from gaussian_quantum.qpca import _bit_reverse
+        eigs = np.array([0.2, 1.0])
+        delta = spectral_scale(eigs)
+        tau = 5
+        bins = eigenphase_window_bins(eigs, delta, tau, window=1)
+        for lam in eigs:
+            centre = int(np.round(lam / delta * 2 ** tau))
+            assert _bit_reverse(centre, tau) in bins
+
+    def test_rank_truncation_shrinks_windows(self):
+        """rank=1 keeps at most one window's worth of bins."""
+        eigs = np.array([0.1, 1.0])
+        delta = spectral_scale(eigs)
+        all_bins = eigenphase_window_bins(eigs, delta, 5, window=1)
+        top1 = eigenphase_window_bins(eigs, delta, 5, rank=1, window=1)
+        assert top1 <= all_bins
+        assert len(top1) <= 3
+
+
+# ── data-matrix encoding ─────────────────────────────────────────────────────
+
+class TestEncodeDataMatrix:
+    def test_unit_norm(self, hsgp_setup):
+        """|ψ_X⟩ is unit-normalised."""
+        X_feat, _, _, _ = hsgp_setup
+        psi_x, _, _, _ = encode_data_matrix(X_feat)
+        np.testing.assert_allclose(np.linalg.norm(psi_x), 1.0, atol=1e-12)
+
+    def test_layout(self, hsgp_setup):
+        """Amplitude index n·2^{n_m} + m holds X[n, m]/‖X‖_F."""
+        X_feat, _, _, _ = hsgp_setup
+        psi_x, frob, n_m, _ = encode_data_matrix(X_feat)
+        N, M = X_feat.shape
+        for n in (0, N - 1):
+            for m in (0, M - 1):
+                np.testing.assert_allclose(
+                    psi_x[(n << n_m) + m], X_feat[n, m] / frob, atol=1e-12
+                )
+
+    def test_partial_trace_is_gram_matrix(self, hsgp_setup):
+        """Tracing out |n⟩ gives ρ = XᵀX/‖X‖_F² on the |m⟩ register."""
+        X_feat, _, _, _ = hsgp_setup
+        psi_x, frob, n_m, n_n = encode_data_matrix(X_feat)
+        M = X_feat.shape[1]
+        block = psi_x.reshape(2 ** n_n, 2 ** n_m)
+        rho = block.conj().T @ block
+        np.testing.assert_allclose(
+            rho[:M, :M], X_feat.T @ X_feat / frob ** 2, atol=1e-12
         )
-        np.testing.assert_allclose(np.linalg.norm(psi1), 1.0, atol=1e-10)
 
-    def test_psi2_unit_norm(self, hsgp_setup, sv_backend):
-        """Amplitude-encoded X^T y state |ψ₂⟩ is unit-normalised."""
+
+# ── analytical SVD references (papers' Eqs. 14–15) ──────────────────────────
+
+class TestAnalyticalReference:
+    def test_mean_matches_classical_posterior(self, hsgp_setup):
+        """Full-rank SVD sum equals X*ᵀ(XᵀX+σ²I)⁻¹Xᵀy exactly."""
         X_feat, y_train, x_star, noise_var = hsgp_setup
-        _, psi2, _, _, _, _ = prepare_mean_states(
-            X_feat, y_train, x_star, noise_var,
-            n_eigenvalue_qubits=3, backend=sv_backend,
+        expected = x_star @ np.linalg.solve(
+            X_feat.T @ X_feat + noise_var * np.eye(X_feat.shape[1]),
+            X_feat.T @ y_train,
         )
-        np.testing.assert_allclose(np.linalg.norm(psi2), 1.0, atol=1e-10)
+        got = qbq_mean_analytical(X_feat, y_train, x_star, noise_var)
+        np.testing.assert_allclose(got, expected, rtol=1e-10)
 
-    def test_success_prob_bounded(self, hsgp_setup, sv_backend):
-        """Success probability is in (0, 1]."""
-        X_feat, y_train, x_star, noise_var = hsgp_setup
-        _, _, _, _, _, sprob = prepare_mean_states(
-            X_feat, y_train, x_star, noise_var,
-            n_eigenvalue_qubits=3, backend=sv_backend,
-        )
-        assert 0 < sprob <= 1
-
-    def test_variance_states_unit_norm(self, hsgp_setup, sv_backend):
-        """Variance states are unit-normalised."""
+    def test_variance_matches_classical_posterior(self, hsgp_setup):
+        """Full-rank SVD sum equals σ²X*ᵀ(XᵀX+σ²I)⁻¹X* exactly."""
         X_feat, _, x_star, noise_var = hsgp_setup
-        psi1, psi2, _, _, _ = prepare_variance_states(
-            X_feat, x_star, noise_var,
-            n_eigenvalue_qubits=3, backend=sv_backend,
+        expected = noise_var * x_star @ np.linalg.solve(
+            X_feat.T @ X_feat + noise_var * np.eye(X_feat.shape[1]), x_star,
         )
-        np.testing.assert_allclose(np.linalg.norm(psi1), 1.0, atol=1e-10)
-        np.testing.assert_allclose(np.linalg.norm(psi2), 1.0, atol=1e-10)
+        got = qbq_variance_analytical(X_feat, x_star, noise_var)
+        np.testing.assert_allclose(got, expected, rtol=1e-10)
 
-    def test_mean_inner_product_sign(self, hsgp_setup, sv_backend):
-        """Re⟨ψ₁|ψ₂⟩ is positive (mean is positive for sin data)."""
+    def test_rank_truncation_monotone(self, hsgp_setup):
+        """The rank-R mean approaches the full-rank mean as R grows."""
         X_feat, y_train, x_star, noise_var = hsgp_setup
-        psi1, psi2, _, _, _, _ = prepare_mean_states(
-            X_feat, y_train, x_star, noise_var,
-            n_eigenvalue_qubits=4, backend=sv_backend,
+        full = qbq_mean_analytical(X_feat, y_train, x_star, noise_var)
+        errs = [abs(qbq_mean_analytical(X_feat, y_train, x_star, noise_var,
+                                        rank=R) - full)
+                for R in (1, 2, 4)]
+        assert errs[-1] <= errs[0] + 1e-12
+
+
+# ── paper-faithful state-preparation circuits ───────────────────────────────
+
+class TestStatePreparationCircuits:
+    def test_mean_state_norm_and_reconstruction(self, hsgp_setup, sv_backend):
+        """The mean circuit statevector is normalised and its Hadamard-test
+        readout reconstructs the classical HSGP posterior mean."""
+        X_feat, y_train, x_star, noise_var = hsgp_setup
+        sv, c1, info = prepare_mean_state_circuit(
+            X_feat, noise_var, n_eigenvalue_qubits=6, backend=sv_backend,
         )
-        inner = float(np.real(np.vdot(psi1, psi2)))
-        assert inner > 0
+        np.testing.assert_allclose(np.linalg.norm(sv), 1.0, atol=1e-10)
+
+        re = mean_overlap(sv, info, x_star, y_train)
+        q_mean = (info["frob"] * np.linalg.norm(x_star)
+                  * np.linalg.norm(y_train) * re / c1)
+        expected = qbq_mean_analytical(X_feat, y_train, x_star, noise_var)
+        assert abs(q_mean - expected) < 0.05 * max(abs(expected), 0.1)
+
+    def test_variance_probabilities_valid(self, hsgp_setup, sv_backend):
+        """Variance-circuit outcome probabilities form a distribution."""
+        X_feat, _, x_star, noise_var = hsgp_setup
+        sv, c2, info = prepare_variance_state_circuit(
+            X_feat, noise_var, n_eigenvalue_qubits=6, backend=sv_backend,
+        )
+        probs = variance_probabilities(sv, info, x_star)
+        assert np.all(probs >= 0)
+        np.testing.assert_allclose(np.sum(probs), 1.0, atol=1e-10)
+
+    def test_variance_reconstruction(self, hsgp_setup, sv_backend):
+        """SWAP-test statistics reconstruct the analytical variance."""
+        X_feat, _, x_star, noise_var = hsgp_setup
+        sv, c2, info = prepare_variance_state_circuit(
+            X_feat, noise_var, n_eigenvalue_qubits=6, backend=sv_backend,
+        )
+        probs = variance_probabilities(sv, info, x_star)
+        p1 = probs[2] + probs[3]
+        p11 = probs[3]
+        q_var = (noise_var * np.linalg.norm(x_star) ** 2
+                 * info["frob"] ** 2 / c2 ** 2 * (p1 - 2.0 * p11))
+        expected = qbq_variance_analytical(X_feat, x_star, noise_var)
+        assert abs(q_var - expected) < 0.15 * max(expected, 1e-6)
+
+    def test_variance_rotation_constant_positive(self):
+        """Variance rotation returns a positive normalisation constant."""
+        _, c2 = conditional_rotation_variance(4, 0.01, 1.0)
+        assert c2 > 0

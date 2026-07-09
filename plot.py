@@ -182,11 +182,20 @@ def _mse(r, method):
 
 
 def print_summary_table(results, run_quantum=False, run_quantum_analytical=False):
-    """Print a tabular summary of results using MSE = bias² + variance."""
+    """Print a tabular summary of results using MSE = bias² + variance.
+
+    The Tail% column reports the domain-truncation remainder
+    ∫_b^∞ Π(z)f(z)dz as a percentage of the untruncated expectation, so the
+    truncation error can be compared against the method errors.
+    """
+    has_tail = bool(results) and "exact_tail" in results[0]
     header = (
         f"{'Distribution':>12s}  {'Payoff':>25s}  "
-        f"{'Exact':>10s}  {'GPQ_MSE':>10s}  {'HSGP_MSE':>10s}"
+        f"{'Exact':>10s}"
     )
+    if has_tail:
+        header += f"  {'Tail%':>6s}"
+    header += f"  {'GPQ_MSE':>10s}  {'HSGP_MSE':>10s}"
     if run_quantum_analytical:
         header += f"  {'QA_MSE':>10s}"
     if run_quantum:
@@ -199,8 +208,13 @@ def print_summary_table(results, run_quantum=False, run_quantum_analytical=False
     for r in results:
         line = (
             f"{r['dist_name']:>12s}  {r['payoff_name']:>25s}  "
-            f"{r['exact']:10.6f}  {_mse(r, 'gpq'):10.6f}  {_mse(r, 'hsgp'):10.6f}"
+            f"{r['exact']:10.6f}"
         )
+        if has_tail:
+            tail = r.get("exact_tail", 0.0)
+            full = r["exact"] + tail
+            line += f"  {tail / full * 100 if full else 0.0:6.3f}"
+        line += f"  {_mse(r, 'gpq'):10.6f}  {_mse(r, 'hsgp'):10.6f}"
         if run_quantum_analytical and "quantum_analytical_mean" in r:
             line += f"  {_mse(r, 'quantum_analytical'):10.6f}"
         elif run_quantum_analytical:

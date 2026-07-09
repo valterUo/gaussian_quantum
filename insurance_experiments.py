@@ -47,8 +47,12 @@ def main():
                         help="Number of evaluation points (default: 32)")
     parser.add_argument("--M", type=int, default=32,
                         help="Number of HSGP basis functions (default: 32)")
-    parser.add_argument("--shots", type=int, default=65536,
-                        help="Quantum measurement shots (default: 65536 = 16 qubits)")
+    parser.add_argument("--shots", type=int, default=4_194_304,
+                        help="Quantum measurement shots (default: 2^22; "
+                             "outcomes are sampled from the exact circuit "
+                             "distribution, so large shot counts are free "
+                             "in simulation. The Hadamard-test noise on "
+                             "the mean scales as ~kappa/sqrt(shots).")
     parser.add_argument("--seed", type=int, default=679,
                         help="Random seed (default: 679)")
     parser.add_argument("--noise-std", type=float, default=0.01,
@@ -58,12 +62,21 @@ def main():
                         help="Evaluation point placement (default: hybrid)")
     parser.add_argument("--quantum-N", type=int, default=None,
                         help="Quantum evaluation points (default: same as --N)")
-    parser.add_argument("--quantum-M", type=int, default=None,
-                        help="Quantum HSGP basis functions (default: same as --M)")
-    parser.add_argument("--n-eigenvalue-qubits", type=int, default=12,
-                        help="QPE eigenvalue register qubits (default: 12)")
-    parser.add_argument("--quantum-noise-std", type=float, default=None,
-                        help="Quantum observation noise std (default: same as --noise-std)")
+    parser.add_argument("--quantum-M", type=int, default=8,
+                        help="Quantum HSGP basis functions (default: 8). "
+                             "Together with --quantum-noise-std this keeps "
+                             "the effective condition number kappa = "
+                             "lambda_max/sigma^2 within what a tau-qubit QPE "
+                             "register can resolve (2^tau >~ kappa); the "
+                             "papers' complexity is O(kappa^2).")
+    parser.add_argument("--n-eigenvalue-qubits", type=int, default=10,
+                        help="QPE eigenvalue register qubits (default: 10; "
+                             "the delta-scaled QPE resolves the spectrum "
+                             "without the large registers the old trace "
+                             "normalisation required)")
+    parser.add_argument("--quantum-noise-std", type=float, default=0.05,
+                        help="Quantum observation noise std (default: 0.05, "
+                             "see --quantum-M)")
     parser.add_argument("--quantum-length-scale", type=float, default=None,
                         help="Quantum kernel length scale (default: same as auto-computed length scale)")
     parser.add_argument("--load_from_file", type=str, default=None,

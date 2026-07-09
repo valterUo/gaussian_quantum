@@ -4,6 +4,8 @@ import numpy as np
 from gaussian_quantum.insurance import (
     make_integrand,
     exact_integral,
+    quad_breakpoints,
+    tail_mass,
     DISTRIBUTIONS,
     PAYOFFS,
     PAYOFF_DEFAULTS,
@@ -74,7 +76,7 @@ def run_experiment(
     run_quantum=False,
     run_quantum_analytical=False,
     n_eigenvalue_qubits=8,
-    shots=65536,
+    shots=4_194_304,
     seed=679,
     point_strategy="hybrid",
     quantum_N=None,
@@ -160,12 +162,19 @@ def run_experiment(
     }
     timings = {}
 
-    # ── 1. Exact integral ─────────────────────────────────────────────────
+    # ── 1. Exact integral (with kink/bin breakpoints) and tail remainder ──
     t0 = time.perf_counter()
-    exact_val, exact_err = exact_integral(integrand, domain)
+    breakpoints = quad_breakpoints(
+        dist_name, domain, payoff_params or PAYOFF_DEFAULTS.get(payoff_name),
+    )
+    exact_val, exact_err = exact_integral(integrand, domain, points=breakpoints)
     timings["exact"] = time.perf_counter() - t0
     result["exact"] = exact_val
     result["exact_err"] = exact_err
+    # Mass of the untruncated expectation E[Π(Z)] beyond the domain: the BQ
+    # target is the truncated integral, so this quantifies the truncation
+    # error separately from the method errors.
+    result["exact_tail"] = tail_mass(integrand, domain, dist_name)
 
     # ── 2. Classical GPQ (full RBF kernel) ────────────────────────────────
     t0 = time.perf_counter()
@@ -187,21 +196,8 @@ def run_experiment(
     result["hsgp_mean"] = hsgp_mean
     result["hsgp_var"] = hsgp_var
 
-    # ── 4. Quantum HSGP-BQ  ────────────────────────────────────
-    if run_quantum_analytical:
-        from gaussian_quantum.quantum_algorithms import quantum_hsgp_integral
-
-        t0 = time.perf_counter()
-        qa_mean, qa_var = quantum_hsgp_integral(
-            X_eval, y_eval, centered_domain, M, L, noise_var,
-            length_scale=length_scale, amplitude=amplitude,
-            analytical=True,
-        )
-        timings["quantum_analytical"] = time.perf_counter() - t0
-        result["quantum_analytical_mean"] = qa_mean
-        result["quantum_analytical_var"] = qa_var
-
-    if run_quantum:
+    # ── 4. Quantum HSGP-BQ ────────────────────────────────────────────────
+    if run_quantum or run_quantum_analytical:
         from gaussian_quantum.quantum_algorithms import quantum_hsgp_integral
 
         # Reuse the classical evaluation points when quantum_N matches N so
@@ -219,6 +215,32 @@ def run_experiment(
 
         q_X_eval = (q_X_raw - midpoint).reshape(-1, 1)
 
+        # Classical HSGP-BQ on the *quantum* data with the *quantum*
+        # hyperparameters: the exact target the quantum circuit converges to
+        # as τ, shots → ∞.  Plotting this alongside the quantum estimate
+        # isolates the QPE/shot error from hyperparameter differences.
+        t0 = time.perf_counter()
+        hsgp_q_mean, hsgp_q_var = hsgp_integral(
+            q_X_eval, q_y_eval, centered_domain, quantum_M, L,
+            noise_var=q_noise_var, length_scale=quantum_length_scale,
+            amplitude=amplitude,
+        )
+        timings["hsgp_quantum_params"] = time.perf_counter() - t0
+        result["hsgp_q_mean"] = hsgp_q_mean
+        result["hsgp_q_var"] = hsgp_q_var
+
+    if run_quantum_analytical:
+        t0 = time.perf_counter()
+        qa_mean, qa_var = quantum_hsgp_integral(
+            q_X_eval, q_y_eval, centered_domain, quantum_M, L, q_noise_var,
+            length_scale=quantum_length_scale, amplitude=amplitude,
+            analytical=True,
+        )
+        timings["quantum_analytical"] = time.perf_counter() - t0
+        result["quantum_analytical_mean"] = qa_mean
+        result["quantum_analytical_var"] = qa_var
+
+    if run_quantum:
         t0 = time.perf_counter()
         q_mean, q_var = quantum_hsgp_integral(
             q_X_eval, q_y_eval, centered_domain, quantum_M, L, q_noise_var,

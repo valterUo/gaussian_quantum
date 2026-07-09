@@ -35,12 +35,7 @@ from gaussian_quantum.hilbert_space_approx import (
     hilbert_space_features,
     kernel_mean_features,
 )
-from gaussian_quantum.qpca import (
-    build_density_matrix_unitary,
-    conditional_rotation_mean,
-    prepare_mean_states,
-    prepare_mean_states_analytical,
-)
+from gaussian_quantum.qpca import qbq_mean_analytical
 
 # Distribution parameters (same as insurance_experiments.py)
 EXPERIMENT_DIST_PARAMS = {
@@ -134,15 +129,8 @@ def evaluate_analytical(
     else:
         min_gap = float("nan")
 
-    # Analytical mean
-    psi1, psi2, n1, n2, c_mean, sprob = prepare_mean_states_analytical(
-        X_feat, y_eval, z_mu, noise_var,
-    )
-    if n1 < 1e-12 or n2 < 1e-12 or sprob < 1e-15:
-        analytical_mean = 0.0
-    else:
-        inner = float(np.real(np.vdot(psi1, psi2)))
-        analytical_mean = float((1.0 / c_mean) * n1 * n2 * inner)
+    # Analytical mean (exact SVD sum, papers' Eq. 14)
+    analytical_mean = qbq_mean_analytical(X_feat, y_eval, z_mu, noise_var)
 
     return {
         "dist": dist_name,
@@ -322,10 +310,12 @@ def run_grid_search(full=False, analytical_only=False):
 
     for pi, (params, anl_mean, anl_max, _) in enumerate(promising):
         for tau in tau_values:
-            # Skip if n_state_qubits + tau + 1 > ~16 (too slow)
-            n_state_q = max(1, int(np.ceil(np.log2(params["quantum_M"]))))
-            total_qubits = tau + n_state_q + 1
-            if total_qubits > 14:
+            # Skip statevector simulations that would be too large: the
+            # papers' circuit spans τ + log2(M) + log2(N) + 1 qubits.
+            n_m = max(1, int(np.ceil(np.log2(params["quantum_M"]))))
+            n_n = max(1, int(np.ceil(np.log2(params["quantum_N"]))))
+            total_qubits = tau + n_m + n_n + 1
+            if total_qubits > 20:
                 continue
 
             for shots in shots_values:
